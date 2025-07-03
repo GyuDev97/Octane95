@@ -4,7 +4,7 @@
             "outputFile": "com.octane.octane95.app-mergeReleaseResources-32:/values-night-v8/values-night-v8.xml",
             "map": [
                 {
-                    "source": "D:\\github\\Octane95\\android\\app\\src\\main\\res\\values-night\\styles.xml",
+                    "source": "D:\\github\\Octane95\\app\\android\\app\\src\\main\\res\\values-night\\styles.xml",
                     "from": {
                         "startLines": "3,14",
                         "startColumns": "4,4",
@@ -23,7 +23,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\gyu_desktop\\.gradle\\caches\\transforms-3\\a698a7b7e559b3cff50d7a558ddc2f4f\\transformed\\appcompat-1.6.1\\res\\values-night-v8\\values-night-v8.xml",
+                    "source": "C:\\Users\\Bizntech\\.gradle\\caches\\transforms-3\\3c1eaee63e5080d04252196c5556f948\\transformed\\appcompat-1.6.1\\res\\values-night-v8\\values-night-v8.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",

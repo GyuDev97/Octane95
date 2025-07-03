@@ -1,0 +1,4 @@
+storePassword=byeonggyu12
+keyPassword=byeonggyu12
+keyAlias=gyulab
+storeFile=./key.jks
