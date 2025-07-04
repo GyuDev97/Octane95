@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>옥탄가 계산기</title>
-
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -20,6 +19,31 @@
       text-align: center;
       margin-bottom: 20px;
     }
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      cursor: pointer;
+    }
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 12px;
+      background: #eee;
+      border-radius: 8px 8px 0 0;
+      margin-right: 5px;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+    .tab.active {
+      background-color: #ff4d4d;
+      color: white;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
     .section {
       margin-bottom: 20px;
       padding: 15px;
@@ -30,27 +54,15 @@
     label {
       font-weight: bold;
       display: block;
-      margin-bottom: 8px;
+      margin-top: 10px;
     }
     input {
       padding: 10px;
+      margin-top: 5px;
       width: 100%;
       border: 1px solid #ccc;
       border-radius: 8px;
       font-size: 16px;
-    }
-    .inline-inputs {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    .inline-inputs input {
-      flex: 1;
-    }
-    @media (max-width: 480px) {
-      .inline-inputs {
-        flex-direction: column;
-      }
     }
     button {
       background-color: #ff4d4d;
@@ -74,116 +86,99 @@
       border-radius: 12px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.05);
     }
-
-    /* -------- 사이드 메뉴 -------- */
-    .hamburger {
-      font-size: 28px;
-      cursor: pointer;
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      z-index: 1001;
-    }
-
-    .sidebar {
-      height: 100%;
-      width: 0;
-      position: fixed;
-      z-index: 1000;
-      top: 0;
-      left: 0;
-      background-color: #fff;
-      overflow-x: hidden;
-      transition: 0.3s;
-      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-      padding-top: 60px;
-    }
-
-    .sidebar a {
-      padding: 14px 24px;
-      text-decoration: none;
-      font-size: 18px;
-      display: block;
-      color: #333;
-    }
-
-    .sidebar a:hover {
-      background-color: #f2f2f2;
-    }
-
-    .closebtn {
-      position: absolute;
-      top: 20px;
-      right: 25px;
-      font-size: 28px;
-      cursor: pointer;
-    }
-
-    /* 내용 영역에 메뉴 가리지 않도록 여백 */
-    .content {
-      padding-top: 60px;
-    }
   </style>
 </head>
 <body>
 
-  <!-- ☰ 햄버거 버튼 -->
-  <span class="hamburger" onclick="openNav()">☰</span>
+  <h1>옥탄가 계산기</h1>
 
-  <!-- ⬅️ 왼쪽 슬라이드 메뉴 -->
-  <div id="mySidebar" class="sidebar">
-    <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">×</a>
-    <a href="#">🏠 홈</a>
-    <a href="#">🧪 옥탄가 계산</a>
-    <a href="#">⛽ 주유 기록 (예정)</a>
-    <a href="#">⚙️ 설정</a>
+  <!-- ✅ 탭 메뉴 -->
+  <div class="tabs">
+    <div class="tab active" data-tab="avg">평균 옥탄가 계산</div>
+    <div class="tab" data-tab="sim">목표 옥탄가 시뮬레이터</div>
   </div>
 
-  <!-- 👇 본문 내용 -->
-  <div class="content">
-    <h1>옥탄가 계산기</h1>
-
+  <!-- ✅ 평균 옥탄가 계산기 -->
+  <div class="tab-content active" id="avg">
     <div class="section">
       <label>내 차량 연료탱크 크기 (L)</label>
-      <input type="number" id="tankSize" placeholder="예: 50">
+      <input type="number" id="tankSize" placeholder="50">
+
+      <h4>🚗 고급유</h4>
+      <label>금액 (원)</label>
+      <input type="text" id="premiumPrice" placeholder="예: 30,000">
+
+      <label>리터당 가격 (원)</label>
+      <input type="number" id="premiumPerLiter" placeholder="예: 1850">
+
+      <h4>⛽ 일반유</h4>
+      <label>금액 (원)</label>
+      <input type="text" id="regularPrice" placeholder="예: 30,000">
+
+      <label>리터당 가격 (원)</label>
+      <input type="number" id="regularPerLiter" placeholder="예: 1630">
+
+      <button id="calcAvgBtn">평균 옥탄가 계산</button>
+
+      <div class="result" id="result"></div>
     </div>
-
-    <div class="section">
-      <h3>⛽ 고급유</h3>
-      <div class="inline-inputs">
-        <input type="number" id="premiumPrice" placeholder="금액 (예: 30000)">
-        <input type="number" id="premiumPerLiter" placeholder="리터당 가격 (예: 1850)">
-      </div>
-    </div>
-
-    <div class="section">
-      <h3>⛽ 일반유</h3>
-      <div class="inline-inputs">
-        <input type="number" id="regularPrice" placeholder="금액 (예: 30000)">
-        <input type="number" id="regularPerLiter" placeholder="리터당 가격 (예: 1630)">
-      </div>
-    </div>
-
-    <button onclick="calculate()">평균 옥탄가 계산</button>
-
-    <div class="result" id="result"></div>
   </div>
 
+  <!-- ✅ 목표 옥탄가 시뮬레이터 -->
+  <div class="tab-content" id="sim">
+    <div class="section">
+      <label>목표 옥탄가</label>
+      <input type="number" id="targetOctane" placeholder="예: 95">
+
+      <label>현재 탱크 잔여량 (L) (선택)</label>
+      <input type="number" id="currentFuel" placeholder="예: 10">
+
+      <label>탱크 총 용량 (L)</label>
+      <input type="number" id="tankSizeSim" placeholder="예: 50">
+
+      <button id="simulateBtn">추천 비율 시뮬레이션</button>
+
+      <div class="result" id="simResult"></div>
+    </div>
+  </div>
+
+  <!-- ✅ jQuery CDN -->
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+
   <script>
-    function openNav() {
-      document.getElementById("mySidebar").style.width = "250px";
+    // ✅ 탭 전환
+    $('.tab').click(function(){
+      var tab_id = $(this).data('tab');
+
+      $('.tab').removeClass('active');
+      $('.tab-content').removeClass('active');
+
+      $(this).addClass('active');
+      $('#' + tab_id).addClass('active');
+    });
+
+    // ✅ 천 단위 콤마 함수
+    function addComma(value) {
+      return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
 
-    function closeNav() {
-      document.getElementById("mySidebar").style.width = "0";
+    function removeComma(value) {
+      return value.replace(/,/g, "");
     }
 
-    function calculate() {
-      const premiumPrice = parseFloat(document.getElementById('premiumPrice').value) || 0;
-      const premiumPerLiter = parseFloat(document.getElementById('premiumPerLiter').value) || 1;
-      const regularPrice = parseFloat(document.getElementById('regularPrice').value) || 0;
-      const regularPerLiter = parseFloat(document.getElementById('regularPerLiter').value) || 1;
-      const tankSize = parseFloat(document.getElementById('tankSize').value) || 50;
+    // ✅ 금액 입력 시 실시간 콤마
+    $('#premiumPrice, #regularPrice').on('keyup', function() {
+      let val = $(this).val().replace(/[^0-9]/g, "");
+      $(this).val(addComma(val));
+    });
+
+    // ✅ 평균 옥탄가 계산
+    $('#calcAvgBtn').click(function() {
+      const tankSize = parseFloat($('#tankSize').val()) || 50;
+      const premiumPrice = parseFloat(removeComma($('#premiumPrice').val())) || 0;
+      const premiumPerLiter = parseFloat($('#premiumPerLiter').val()) || 1;
+      const regularPrice = parseFloat(removeComma($('#regularPrice').val())) || 0;
+      const regularPerLiter = parseFloat($('#regularPerLiter').val()) || 1;
 
       const premiumLiter = premiumPrice / premiumPerLiter;
       const regularLiter = regularPrice / regularPerLiter;
@@ -195,13 +190,41 @@
 
       const fillPercent = tankSize > 0 ? (totalLiter / tankSize * 100) : 0;
 
-      document.getElementById('result').innerHTML = `
-        ✅ 총 주유량: <b>${totalLiter.toFixed(2)}L</b><br>
+      $('#result').html(`
+        ✅ 총 주유량: <b>${totalLiter.toFixed(2)} L</b><br>
         ✅ 평균 옥탄가: <b>${avgOctane.toFixed(2)}</b><br>
         ✅ 고급유 비율: <b>${(premiumLiter / totalLiter * 100).toFixed(1)}%</b><br>
         ✅ 연료탱크의 <b>${fillPercent.toFixed(1)}%</b> 충전됨
-      `;
-    }
+      `);
+    });
+
+    // ✅ 목표 옥탄가 시뮬레이터
+    $('#simulateBtn').click(function() {
+      const targetOctane = parseFloat($('#targetOctane').val()) || 0;
+      const currentFuel = parseFloat($('#currentFuel').val()) || 0;
+      const tankSize = parseFloat($('#tankSizeSim').val()) || 0;
+
+      const maxAddable = tankSize - currentFuel;
+      const currentOctane = 91;
+
+      const A = targetOctane * (currentFuel + maxAddable);
+      const B = currentFuel * currentOctane + maxAddable * 91;
+
+      const X = (A - B) / (100 - 91);
+      const Y = maxAddable - X;
+
+      const finalOctane = (currentFuel*currentOctane + X*100 + Y*91) / (currentFuel + X + Y);
+      const fillPercent = ((currentFuel + X + Y)/tankSize*100).toFixed(1);
+
+      $('#simResult').html(`
+        ✅ 추천 조합:<br>
+        - 고급유: <b>${X.toFixed(2)} L</b><br>
+        - 일반유: <b>${Y.toFixed(2)} L</b><br>
+        ✅ 예상 평균 옥탄가: <b>${finalOctane.toFixed(2)}</b><br>
+        ✅ 예상 탱크 충전: <b>${fillPercent}%</b>
+      `);
+    });
   </script>
+
 </body>
 </html>
