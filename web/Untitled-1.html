@@ -105,6 +105,9 @@
       <input type="number" id="tankSize" placeholder="50">
 
       <h4>🚗 고급유</h4>
+      <label>옥탄가</label>
+      <input type="number" id="premiumOctane" placeholder="예: 100">
+
       <label>금액 (원)</label>
       <input type="text" id="premiumPrice" placeholder="예: 30,000">
 
@@ -112,6 +115,9 @@
       <input type="number" id="premiumPerLiter" placeholder="예: 1850">
 
       <h4>⛽ 일반유</h4>
+      <label>옥탄가</label>
+      <input type="number" id="regularOctane" placeholder="예: 91">
+
       <label>금액 (원)</label>
       <input type="text" id="regularPrice" placeholder="예: 30,000">
 
@@ -136,6 +142,12 @@
       <label>탱크 총 용량 (L)</label>
       <input type="number" id="tankSizeSim" placeholder="예: 50">
 
+      <label>고급유 옥탄가</label>
+      <input type="number" id="premiumOctaneSim" placeholder="예: 100">
+
+      <label>일반유 옥탄가</label>
+      <input type="number" id="regularOctaneSim" placeholder="예: 91">
+
       <button id="simulateBtn">추천 비율 시뮬레이션</button>
 
       <div class="result" id="simResult"></div>
@@ -149,10 +161,8 @@
     // ✅ 탭 전환
     $('.tab').click(function(){
       var tab_id = $(this).data('tab');
-
       $('.tab').removeClass('active');
       $('.tab-content').removeClass('active');
-
       $(this).addClass('active');
       $('#' + tab_id).addClass('active');
     });
@@ -161,7 +171,6 @@
     function addComma(value) {
       return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
-
     function removeComma(value) {
       return value.replace(/,/g, "");
     }
@@ -175,8 +184,13 @@
     // ✅ 평균 옥탄가 계산
     $('#calcAvgBtn').click(function() {
       const tankSize = parseFloat($('#tankSize').val()) || 50;
+
+      const premiumOctane = parseFloat($('#premiumOctane').val()) || 100;
+      const regularOctane = parseFloat($('#regularOctane').val()) || 91;
+
       const premiumPrice = parseFloat(removeComma($('#premiumPrice').val())) || 0;
       const premiumPerLiter = parseFloat($('#premiumPerLiter').val()) || 1;
+
       const regularPrice = parseFloat(removeComma($('#regularPrice').val())) || 0;
       const regularPerLiter = parseFloat($('#regularPerLiter').val()) || 1;
 
@@ -185,7 +199,7 @@
       const totalLiter = premiumLiter + regularLiter;
 
       const avgOctane = totalLiter === 0 ? 0 : (
-        (premiumLiter * 100 + regularLiter * 91) / totalLiter
+        (premiumLiter * premiumOctane + regularLiter * regularOctane) / totalLiter
       );
 
       const fillPercent = tankSize > 0 ? (totalLiter / tankSize * 100) : 0;
@@ -204,16 +218,19 @@
       const currentFuel = parseFloat($('#currentFuel').val()) || 0;
       const tankSize = parseFloat($('#tankSizeSim').val()) || 0;
 
+      const premiumOctane = parseFloat($('#premiumOctaneSim').val()) || 100;
+      const regularOctane = parseFloat($('#regularOctaneSim').val()) || 91;
+
       const maxAddable = tankSize - currentFuel;
-      const currentOctane = 91;
+      const currentOctane = regularOctane; // 잔여유 옥탄가는 일반유 기준으로 가정
 
       const A = targetOctane * (currentFuel + maxAddable);
-      const B = currentFuel * currentOctane + maxAddable * 91;
+      const B = currentFuel * currentOctane + maxAddable * regularOctane;
 
-      const X = (A - B) / (100 - 91);
+      const X = (A - B) / (premiumOctane - regularOctane);
       const Y = maxAddable - X;
 
-      const finalOctane = (currentFuel*currentOctane + X*100 + Y*91) / (currentFuel + X + Y);
+      const finalOctane = (currentFuel*currentOctane + X*premiumOctane + Y*regularOctane) / (currentFuel + X + Y);
       const fillPercent = ((currentFuel + X + Y)/tankSize*100).toFixed(1);
 
       $('#simResult').html(`
