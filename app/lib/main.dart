@@ -1,22 +1,71 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
-void main() {
+import 'history_detail_page.dart';
+import 'model/octane_log.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Hive.initFlutter();
+  Hive.registerAdapter(OctaneLogAdapter());
+  await Hive.openBox<OctaneLog>('octane_logs');
+
   runApp(const OctaneApp());
 }
 
 class OctaneApp extends StatelessWidget {
   const OctaneApp({super.key});
 
+  // ✅ “분홍분홍” 줄이고, 자동차/계기판 느낌(뉴트럴+버건디 포인트)
+  static const Color _brand = Color(0xFF7A2E2E); // 버건디/다크레드
+  static const Color _bg = Color(0xFFF6F3F1); // 아주 연한 웜 그레이
+
   @override
   Widget build(BuildContext context) {
-    const primaryRed = Color(0xFFFF4A4A);
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorSchemeSeed: _brand,
+      scaffoldBackgroundColor: _bg,
+    );
+
     return MaterialApp(
+      title: '고급유 노트',
       debugShowCheckedModeBanner: false,
-      title: '옥탄가 계산기',
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFF2F2F2),
-        colorScheme: ColorScheme.fromSeed(seedColor: primaryRed),
-        useMaterial3: true,
+      theme: base.copyWith(
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+        ),
+          tabBarTheme: const TabBarThemeData(
+            labelColor: Color(0xFF7A2E2E),
+            unselectedLabelColor: Colors.black87,
+            indicatorColor: Color(0xFF7A2E2E),
+            labelStyle: TextStyle(fontWeight: FontWeight.w700),
+          ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            backgroundColor: _brand,
+            foregroundColor: Colors.white,
+            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 2,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+
       ),
       home: const OctaneHomePage(),
     );
@@ -33,106 +82,283 @@ class OctaneHomePage extends StatefulWidget {
 class _OctaneHomePageState extends State<OctaneHomePage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  int _currentTab = 0;
 
-  // 평균 옥탄가 계산
-  final tankSizeCtrl = TextEditingController();
-  final highOctaneCtrl = TextEditingController(text: "100");
-  final highFuelCtrl = TextEditingController();
-  final regOctaneCtrl = TextEditingController(text: "91");
-  final regFuelCtrl = TextEditingController();
+  // ===== 입력 컨트롤러 =====
+  final TextEditingController highFuelCtrl = TextEditingController();
+  final TextEditingController regFuelCtrl = TextEditingController();
 
-  // 목표 옥탄가 계산
-  final targetOctaneCtrl = TextEditingController(text: "95");
-  final remainCtrl = TextEditingController();
-  final totalCtrl = TextEditingController();
-  double mixRatio = 50;
+  final TextEditingController beforeLiterCtrl = TextEditingController();
+  final TextEditingController beforeOctaneCtrl = TextEditingController();
+  final TextEditingController addLiterCtrl = TextEditingController();
+  final TextEditingController addOctaneCtrl = TextEditingController();
+
+  double? _avgResult;
+  String? _avgComment;
+
+  double? _mixResult;
+  String? _mixComment;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-      if (_currentTab != _tabController.index) {
-        setState(() {
-          _currentTab = _tabController.index;
-        });
-      }
-    });
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
   void dispose() {
-    tankSizeCtrl.dispose();
-    highOctaneCtrl.dispose();
-    highFuelCtrl.dispose();
-    regOctaneCtrl.dispose();
-    regFuelCtrl.dispose();
-    targetOctaneCtrl.dispose();
-    remainCtrl.dispose();
-    totalCtrl.dispose();
     _tabController.dispose();
+    highFuelCtrl.dispose();
+    regFuelCtrl.dispose();
+    beforeLiterCtrl.dispose();
+    beforeOctaneCtrl.dispose();
+    addLiterCtrl.dispose();
+    addOctaneCtrl.dispose();
     super.dispose();
   }
 
-  // 평균 옥탄가
+  // ================= 계산 로직 =================
+
   double _calcAverageOctane() {
-    final highO = double.tryParse(highOctaneCtrl.text) ?? 0;
-    final highL = double.tryParse(highFuelCtrl.text) ?? 0;
-    final regO = double.tryParse(regOctaneCtrl.text) ?? 0;
-    final regL = double.tryParse(regFuelCtrl.text) ?? 0;
-    final totalL = highL + regL;
-    if (totalL == 0) return 0;
-    return (highO * highL + regO * regL) / totalL;
+    final high = double.tryParse(highFuelCtrl.text) ?? 0;
+    final reg = double.tryParse(regFuelCtrl.text) ?? 0;
+    final total = high + reg;
+    if (total <= 0) return 0;
+    // (예시) 고급유/일반유 고정 옥탄가 기준
+    return ((high * 94) + (reg * 91)) / total;
   }
+
+  double _calcMixedOctane() {
+    final beforeL = double.tryParse(beforeLiterCtrl.text) ?? 0;
+    final beforeO = double.tryParse(beforeOctaneCtrl.text) ?? 0;
+    final addL = double.tryParse(addLiterCtrl.text) ?? 0;
+    final addO = double.tryParse(addOctaneCtrl.text) ?? 0;
+    final total = beforeL + addL;
+    if (total <= 0) return 0;
+    return ((beforeL * beforeO) + (addL * addO)) / total;
+  }
+
+  // ================= 저장 =================
+
+  void _saveLog({
+    required String type,
+    required double result,
+    required Map<String, dynamic> inputs,
+  }) {
+    final box = Hive.box<OctaneLog>('octane_logs');
+    box.add(
+      OctaneLog(
+        time: DateTime.now(),
+        type: type, // average | mixed
+        result: result,
+        inputs: inputs,
+      ),
+    );
+  }
+
+  // ================= 상태(태그/문구) =================
+
+  _Status _status(double v) {
+    if (v >= 95) {
+      return _Status("안정", Icons.verified_rounded, Colors.green);
+    } else if (v >= 92) {
+      return _Status("보통", Icons.info_outline_rounded, Colors.orange);
+    } else if (v >= 90) {
+      return _Status("주의", Icons.warning_amber_rounded, Colors.deepOrange);
+    } else {
+      return _Status("위험", Icons.error_rounded, Colors.red);
+    }
+  }
+
+
+  String _statusSentence(double v) {
+    if (v >= 95) return "일반·고속 주행 모두 무난합니다";
+    if (v >= 92) return "일상 주행에는 문제 없습니다";
+    if (v >= 90) return "급가속·고회전은 자제하세요";
+    return "노킹 가능성이 있으니 주의하세요";
+  }
+
+
+  // ================= 액션 =================
+
+  void _onCalcAverage() {
+    final v = _calcAverageOctane();
+    if (v > 0) {
+      _saveLog(
+        type: "average",
+        result: v,
+        inputs: {
+          "highLiter": highFuelCtrl.text,
+          "regularLiter": regFuelCtrl.text,
+        },
+      );
+    }
+    setState(() {
+      _avgResult = v;
+      _avgComment = _statusSentence(v);
+    });
+  }
+
+  void _onCalcMixed() {
+    final v = _calcMixedOctane();
+    if (v > 0) {
+      _saveLog(
+        type: "mixed",
+        result: v,
+        inputs: {
+          "기존잔여연료": beforeLiterCtrl.text,
+          "기존옥탄기": beforeOctaneCtrl.text,
+          "추가연료": addLiterCtrl.text,
+          "추가연료 옥탄가": addOctaneCtrl.text,
+        },
+      );
+    }
+    setState(() {
+      _mixResult = v;
+      _mixComment = _statusSentence(v);
+    });
+  }
+
+  // ================= UI =================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          "고급유 노트",
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: "평균 계산"),
+            Tab(text: "혼합 계산"),
+            Tab(text: "기록"),
+          ],
+        ),
+      ),
       body: SafeArea(
-        child: Column(
+        child: TabBarView(
+          controller: _tabController,
           children: [
-            // 상단 영역
-            Container(
-              margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+            _buildAverageTab(),
+            _buildMixedTab(),
+            _buildHistoryTab(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===== 공통 패딩(하단 네비 겹침 방지) =====
+  EdgeInsets _listPadding(BuildContext context) => EdgeInsets.fromLTRB(
+    16,
+    16,
+    16,
+    MediaQuery.of(context).padding.bottom + 80,
+  );
+
+  // ================= 평균 =================
+
+  Widget _buildAverageTab() {
+    return ListView(
+      padding: _listPadding(context),
+      children: [
+        _sectionTitle("입력"),
+        const SizedBox(height: 10),
+        _panelCard(
+          children: [
+            _numberField(highFuelCtrl, "고급유 주유량 (L)", hint: "예: 20"),
+            const SizedBox(height: 12),
+            _numberField(regFuelCtrl, "일반유 주유량 (L)", hint: "예: 25"),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _calcButton("옥탄가 계산", onPressed: _onCalcAverage),
+        if (_avgResult != null) ...[
+          const SizedBox(height: 18),
+          _resultPanel(_avgResult!, _avgComment ?? ""),
+        ],
+      ],
+    );
+  }
+
+  // ================= 혼합 =================
+
+  Widget _buildMixedTab() {
+    return ListView(
+      padding: _listPadding(context),
+      children: [
+        _sectionTitle("입력"),
+        const SizedBox(height: 10),
+        _panelCard(
+          children: [
+            _numberField(beforeLiterCtrl, "기존 연료 (L)", hint: "예: 10"),
+            const SizedBox(height: 12),
+            _numberField(beforeOctaneCtrl, "기존 옥탄가", hint: "예: 95"),
+            const SizedBox(height: 12),
+            _numberField(addLiterCtrl, "추가 연료 (L)", hint: "예: 30"),
+            const SizedBox(height: 12),
+            _numberField(addOctaneCtrl, "추가 옥탄가", hint: "예: 98"),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _calcButton("옥탄가 계산", onPressed: _onCalcMixed),
+        if (_mixResult != null) ...[
+          const SizedBox(height: 18),
+          _resultPanel(_mixResult!, _mixComment ?? ""),
+        ],
+      ],
+    );
+  }
+
+  // ================= 결과 패널(계기판 느낌) =================
+
+  Widget _resultPanel(double value, String comment) {
+    final st = _status(value);
+    final brand = Theme.of(context).colorScheme.primary;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 상단 상태 칩
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _statusChip(st),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              value.toStringAsFixed(2),
+              style: TextStyle(
+                fontSize: 46,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.8,
+                color: Colors.black87,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "OctaneCalc",
+            ),
+            const SizedBox(height: 10),
+            Divider(height: 1, color: Colors.grey.shade300),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(st.icon, size: 18, color: st.color),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    comment,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF222222),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: brand,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  _buildCustomTabBar(const Color(0xFFFF4A4A)),
-                ],
-              ),
-            ),
-
-            // 본문
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildAverageTab(context),
-                  _buildTargetTab(context),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -140,320 +366,220 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
-  // 커스텀 탭바
-  Widget _buildCustomTabBar(Color primaryRed) {
+  Widget _statusChip(_Status st) {
     return Container(
-      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
+        color: st.color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: st.color.withOpacity(0.25)),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildTabButton(0, "평균 옥탄가 계산", primaryRed),
-          _buildTabButton(1, "목표 옥탄가 계산", primaryRed),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabButton(int index, String label, Color primaryRed) {
-    final bool isSelected = _currentTab == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          _tabController.animateTo(index);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
+          Icon(st.icon, size: 16, color: st.color),
+          const SizedBox(width: 6),
+          Text(
+            st.label,
             style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              color: isSelected ? primaryRed : const Color(0xFF555555),
+              color: st.color,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================= 기록 =================
+
+  Widget _buildHistoryTab() {
+    return ValueListenableBuilder(
+      valueListenable: Hive.box<OctaneLog>('octane_logs').listenable(),
+      builder: (context, Box<OctaneLog> box, _) {
+        if (box.isEmpty) {
+          return const Center(child: Text("저장된 기록이 없습니다"));
+        }
+
+        return ListView.builder(
+          padding: _listPadding(context),
+          itemCount: box.length,
+          itemBuilder: (context, index) {
+            final log = box.getAt(box.length - 1 - index)!;
+            return _historyItem(log, indexFromTop: index);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _historyItem(OctaneLog log, {required int indexFromTop}) {
+    final st = _status(log.result);
+    final brand = Theme.of(context).colorScheme.primary;
+
+    final typeTitle = log.type == "average" ? "평균 계산" : "혼합 계산";
+    final typeIcon = log.type == "average"
+        ? Icons.calculate_rounded
+        : Icons.merge_type_rounded;
+
+    final date =
+        "${log.time.year}.${log.time.month.toString().padLeft(2, '0')}.${log.time.day.toString().padLeft(2, '0')}";
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onLongPress: () {
+          // 길게 눌러 삭제 (MVP)
+          final box = Hive.box<OctaneLog>('octane_logs');
+          box.deleteAt(box.length - 1 - indexFromTop);
+        },
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => HistoryDetailPage(log: log),
+            ),
+          );
+        },
+
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            children: [
+              // 좌측 아이콘 (화이트 카드에서 포인트만)
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: brand.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(typeIcon, color: brand),
+              ),
+              const SizedBox(width: 12),
+
+              // 가운데 텍스트
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      typeTitle,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      date,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _statusChip(st),
+                  ],
+                ),
+              ),
+
+              // 우측 결과 숫자 (진한 색, 분홍 X)
+              Text(
+                log.result.toStringAsFixed(2),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // 평균 옥탄가 탭
-  Widget _buildAverageTab(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
+  // ================= 공용 위젯 =================
+
+  Widget _sectionTitle(String text) {
+    return Row(
+      children: [
+        Container(
+          width: 6,
+          height: 18,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary,
+            borderRadius: BorderRadius.circular(99),
+          ),
         ),
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _label("내 차량 연료탱크 크기 (L) (선택)"),
-            const SizedBox(height: 8),
-            _inputField(tankSizeCtrl, hint: "예: 50"),
-            const SizedBox(height: 20),
-            Row(
-              children: const [
-                Text("🚗 고급유",
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _label("옥탄가"),
-            const SizedBox(height: 6),
-            _inputField(highOctaneCtrl, hint: "예: 100"),
-            const SizedBox(height: 10),
-            _label("주유량 (L)"),
-            const SizedBox(height: 6),
-            _inputField(highFuelCtrl, hint: "예: 20"),
-            const SizedBox(height: 20),
-            Row(
-              children: const [
-                Text("🟥 일반유",
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _label("옥탄가"),
-            const SizedBox(height: 6),
-            _inputField(regOctaneCtrl, hint: "예: 91"),
-            const SizedBox(height: 10),
-            _label("주유량 (L)"),
-            const SizedBox(height: 6),
-            _inputField(regFuelCtrl, hint: "예: 15"),
-            const SizedBox(height: 26),
-            _primaryButton(
-              text: "평균 옥탄가 계산",
-              onPressed: () {
-                final avg = _calcAverageOctane();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text("평균 옥탄가: ${avg.toStringAsFixed(2)}"),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-          ],
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
         ),
+      ],
+    );
+  }
+
+  Widget _panelCard({required List<Widget> children}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(children: children),
       ),
     );
   }
 
-  // 목표 옥탄가 탭
-  Widget _buildTargetTab(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _label("목표 옥탄가"),
-            const SizedBox(height: 6),
-            _inputField(targetOctaneCtrl, hint: "예: 95"),
-            const SizedBox(height: 14),
-            _label("현재 탱크 잔여량 (L) (선택)"),
-            const SizedBox(height: 6),
-            _inputField(remainCtrl, hint: "예: 10"),
-            const SizedBox(height: 14),
-            _label("탱크 총 용량 (L)"),
-            const SizedBox(height: 6),
-            _inputField(totalCtrl, hint: "예: 50"),
-            const SizedBox(height: 20),
-            const Text(
-              "혼합 비율 (%)",
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            Slider(
-              value: mixRatio,
-              min: 0,
-              max: 100,
-              divisions: 100,
-              label: "${mixRatio.toInt()}%",
-              onChanged: (v) => setState(() => mixRatio = v),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              "탱크 용량을 입력하면 비율을 추천해 드립니다.",
-              style: TextStyle(color: Colors.grey, fontSize: 12.5),
-            ),
-            const SizedBox(height: 22),
-            _primaryButton(
-              text: "추천 비율 시뮬레이션",
-              onPressed: () {
-                _runSimulation(context);
-              },
-            ),
-          ],
-        ),
-      ),
+  Widget _calcButton(String text, {required VoidCallback onPressed}) {
+    return ElevatedButton.icon(
+      icon: const Icon(Icons.calculate_rounded),
+      label: Text(text),
+      onPressed: onPressed,
     );
   }
 
-  // ---------------- 계산 로직 ----------------
+  // ✅ “입력창이 단단해 보이게” 핵심: filled + outline + 대비
+  Widget _numberField(
+      TextEditingController ctrl,
+      String label, {
+        String? hint,
+      }) {
+    final brand = Theme.of(context).colorScheme.primary;
 
-  void _runSimulation(BuildContext context) {
-    // 평균 탭에서 입력한 고급유/일반유 옥탄가를 그대로 가져다 씀
-    final premiumOctane = double.tryParse(highOctaneCtrl.text) ?? 100.0;
-    final regularOctane = double.tryParse(regOctaneCtrl.text) ?? 91.0;
-
-    final target = double.tryParse(targetOctaneCtrl.text) ?? 0;
-    final remain = double.tryParse(remainCtrl.text) ?? 0;
-    final total = double.tryParse(totalCtrl.text) ?? 0;
-
-    if (total <= 0) {
-      _showMsg(context, "탱크 총 용량(L)을 먼저 입력하세요.");
-      return;
-    }
-
-    final fillable = total - remain; // 넣을 수 있는 양
-
-    if (fillable <= 0) {
-      _showMsg(context, "넣을 수 있는 연료가 없습니다. (잔여량이 탱크보다 같거나 큽니다)");
-      return;
-    }
-
-    // 목표가 일반유보다 낮으면 → 그냥 일반유
-    if (target <= regularOctane) {
-      _showMsg(
-        context,
-        "목표 옥탄가가 일반유(${regularOctane.toStringAsFixed(0)})보다 낮거나 같아요.\n"
-            "👉 일반유 ${fillable.toStringAsFixed(2)} L 넣으면 됩니다.",
-      );
-      return;
-    }
-
-    // 목표가 고급유보다 높으면 → 그냥 고급유
-    if (target >= premiumOctane) {
-      _showMsg(
-        context,
-        "목표 옥탄가가 고급유(${premiumOctane.toStringAsFixed(0)})보다 높거나 같아요.\n"
-            "👉 고급유 ${fillable.toStringAsFixed(2)} L 넣으면 됩니다.",
-      );
-      return;
-    }
-
-    //  regular < target < premium 인 경우 → 혼합해서 맞춤
-    // x = fillable * (T - regular) / (premium - regular)
-    final premiumL =
-        fillable * (target - regularOctane) / (premiumOctane - regularOctane);
-    final regularL = fillable - premiumL;
-
-    final premiumPct = premiumL / fillable * 100;
-    final regularPct = regularL / fillable * 100;
-
-    _showMsg(
-      context,
-      "총 주유 가능량: ${fillable.toStringAsFixed(2)} L\n"
-          "목표 옥탄가: ${target.toStringAsFixed(1)}\n\n"
-          "👉 고급유: ${premiumL.toStringAsFixed(2)} L (${premiumPct.toStringAsFixed(1)}%)\n"
-          "👉 일반유: ${regularL.toStringAsFixed(2)} L (${regularPct.toStringAsFixed(1)}%)",
-    );
-  }
-
-  void _showMsg(BuildContext context, String msg) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("추천 혼합 비율"),
-        content: Text(msg),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("확인"),
-          )
-        ],
-      ),
-    );
-  }
-
-  // ---------------- UI helper ----------------
-
-  Widget _label(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontWeight: FontWeight.w600,
-        fontSize: 13.5,
-        color: Color(0xFF444444),
-      ),
-    );
-  }
-
-  Widget _inputField(TextEditingController controller, {String? hint}) {
     return TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      style: const TextStyle(fontSize: 14.5),
+      controller: ctrl,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
       decoration: InputDecoration(
+        labelText: label,
         hintText: hint,
         filled: true,
-        fillColor: const Color(0xFFF8F8F8),
-        contentPadding:
-        const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+        fillColor: Colors.white,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
-          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
-          borderSide: const BorderSide(color: Color(0xFFFF4A4A), width: 1.4),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: brand, width: 1.6),
         ),
       ),
     );
   }
+}
 
-  Widget _primaryButton(
-      {required String text, required VoidCallback onPressed}) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFFF4A4A),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
-        ),
-        onPressed: onPressed,
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontSize: 15.5,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
+// ===== 상태 모델 =====
+class _Status {
+  final String label;
+  final IconData icon;
+  final Color color;
+  const _Status(this.label, this.icon, this.color);
 }
