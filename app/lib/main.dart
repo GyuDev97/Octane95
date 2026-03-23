@@ -1117,6 +1117,39 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
+
+  Widget _buildCarTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.construction_rounded,
+            size: 60,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            '곧 오픈 준비중이에요 🚧',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '차량 프로필 기능은 곧 추가됩니다',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  /*
   Widget _buildCarTab() {
     final car = Hive.box<CarProfile>('car_profile').get('main');
     if (car != null) {
@@ -1184,7 +1217,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         ),
       ],
     );
-  }
+  }*/
 }
 
 
