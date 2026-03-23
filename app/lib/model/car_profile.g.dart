@@ -16,18 +16,20 @@ class CarProfileAdapter extends TypeAdapter<CarProfile> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+
     return CarProfile(
       name: fields[0] as String,
       year: fields[1] as int,
       recommendedOctane: fields[2] as double,
       warningOctane: fields[3] as double,
+      tankCapacity: fields[4] as double?, // 🔥 추가
     );
   }
 
   @override
   void write(BinaryWriter writer, CarProfile obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5) // 🔥 기존 4 → 5로 변경
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -35,7 +37,9 @@ class CarProfileAdapter extends TypeAdapter<CarProfile> {
       ..writeByte(2)
       ..write(obj.recommendedOctane)
       ..writeByte(3)
-      ..write(obj.warningOctane);
+      ..write(obj.warningOctane)
+      ..writeByte(4)
+      ..write(obj.tankCapacity); // 🔥 추가
   }
 
   @override

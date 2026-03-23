@@ -160,6 +160,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   final TextEditingController carYearCtrl = TextEditingController();
   final TextEditingController carRecCtrl = TextEditingController();
   final TextEditingController carWarnCtrl = TextEditingController();
+  final TextEditingController carTankCtrl = TextEditingController();
 
   double? _avgResult;
   String? _avgComment;
@@ -189,6 +190,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     carYearCtrl.dispose();
     carRecCtrl.dispose();
     carWarnCtrl.dispose();
+    carTankCtrl.dispose();
+
     super.dispose();
   }
 
@@ -302,6 +305,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     required int year,
     required double recommend,
     required double warning,
+    double? tank,
   }) {
     final box = Hive.box<CarProfile>('car_profile');
 
@@ -312,6 +316,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         year: year,
         recommendedOctane: recommend,
         warningOctane: warning,
+        tankCapacity: tank, // 🔥 추가
       ),
     );
   }
@@ -393,6 +398,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             _numberField(addLiterCtrl, '추가 연료(L)', hint: '예: 30'),
             const SizedBox(height: 14),
             _numberField(addOctaneCtrl, '추가 옥탄가', hint: '예: 98'),
+            const SizedBox(height: 14),
+            _numberField(carTankCtrl, '연료탱크 용량(L)', hint: '예: 50'),
           ],
         ),
 
@@ -590,6 +597,75 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
+  Widget _buildStatsCard(List<OctaneLog> logs) {
+    final values = logs.map((e) => e.result).toList();
+
+    final avg = values.reduce((a, b) => a + b) / values.length;
+    final max = values.reduce((a, b) => a > b ? a : b);
+    final min = values.reduce((a, b) => a < b ? a : b);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '통계',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _statItem('평균', avg),
+                _statItem('최고', max),
+                _statItem('최저', min),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            Text(
+              '총 기록 ${logs.length}개',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statItem(String title, double value) {
+    return Column(
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value.toStringAsFixed(2),
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildHistoryTab() {
     return ValueListenableBuilder(
       valueListenable: Hive.box<OctaneLog>('octane_logs').listenable(),
@@ -611,6 +687,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         return ListView(
           padding: _listPadding(context),
           children: [
+            _buildStatsCard(logs), // 🔥 추가
             _buildOctaneChart(logs),
             const SizedBox(height: 10),
             ...List.generate(box.length, (index) {
@@ -1042,7 +1119,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
   Widget _buildCarTab() {
     final car = Hive.box<CarProfile>('car_profile').get('main');
-
+    if (car != null) {
+      carTankCtrl.text = car.tankCapacity?.toString() ?? '';
+    }
     return ListView(
       padding: _listPadding(context),
       children: [
@@ -1092,6 +1171,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               year: int.tryParse(carYearCtrl.text) ?? 0,
               recommend: double.tryParse(carRecCtrl.text) ?? 95,
               warning: double.tryParse(carWarnCtrl.text) ?? 91,
+              tank: double.tryParse(carTankCtrl.text), // 🔥 추가
             );
 
             setState(() {});

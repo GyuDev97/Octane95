@@ -16,10 +16,14 @@ class CarProfile extends HiveObject {
   @HiveField(3)
   double warningOctane;
 
+  @HiveField(4)
+  final double? tankCapacity;
+
   CarProfile({
     required this.name,
     required this.year,
     required this.recommendedOctane,
     required this.warningOctane,
+    this.tankCapacity, // 🔥 추가
   });
 }
