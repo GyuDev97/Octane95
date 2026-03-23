@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'history_detail_page.dart';
+import 'model/car_profile.dart';
 import 'model/octane_log.dart';
 
 void main() async {
@@ -14,6 +15,12 @@ void main() async {
     Hive.registerAdapter(OctaneLogAdapter());
   }
   await Hive.openBox<OctaneLog>('octane_logs');
+
+  if (!Hive.isAdapterRegistered(1)) {
+    Hive.registerAdapter(CarProfileAdapter());
+  }
+
+  await Hive.openBox<CarProfile>('car_profile');
 
   runApp(const OctaneApp());
 }
@@ -99,7 +106,7 @@ class OctaneApp extends StatelessWidget {
           filled: true,
           fillColor: const Color(0xFFFCFBFB),
           isDense: true,
-          floatingLabelBehavior: FloatingLabelBehavior.never,
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
           contentPadding:
           const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
           hintStyle: const TextStyle(
@@ -149,6 +156,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   final TextEditingController addLiterCtrl = TextEditingController();
   final TextEditingController addOctaneCtrl = TextEditingController();
 
+  final TextEditingController carNameCtrl = TextEditingController();
+  final TextEditingController carYearCtrl = TextEditingController();
+  final TextEditingController carRecCtrl = TextEditingController();
+  final TextEditingController carWarnCtrl = TextEditingController();
+
   double? _avgResult;
   String? _avgComment;
 
@@ -173,6 +185,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     beforeOctaneCtrl.dispose();
     addLiterCtrl.dispose();
     addOctaneCtrl.dispose();
+    carNameCtrl.dispose();
+    carYearCtrl.dispose();
+    carRecCtrl.dispose();
+    carWarnCtrl.dispose();
     super.dispose();
   }
 
@@ -181,7 +197,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final reg = double.tryParse(regFuelCtrl.text) ?? 0;
     final total = high + reg;
     if (total <= 0) return 0;
-    return ((high * 94) + (reg * 91)) / total;
+    return ((high * 97) + (reg * 92)) / total;
   }
 
   double _calcMixedOctane() {
@@ -211,33 +227,32 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   _Status _status(double v) {
-    if (v >= 95) {
+    final box = Hive.box<CarProfile>('car_profile');
+    final car = box.get('main');
+
+    final recommend = car?.recommendedOctane ?? 95;
+    final warning = car?.warningOctane ?? 91;
+
+    if (v >= recommend) {
       return _Status(
-        '고급 세팅',
-        '고급유 비율이 높아 엔진 컨디션 유지에 유리합니다',
+        '최적 상태',
+        '차량 기준에서 최상의 옥탄가입니다',
         Icons.verified_rounded,
-        const Color(0xFF4CAF50),
+        Colors.green,
       );
-    } else if (v >= 92) {
+    } else if (v >= warning) {
       return _Status(
-        '균형 상태',
-        '일상 주행과 가벼운 고회전 주행에 무난한 상태입니다',
+        '일반 상태',
+        '일반 주행에 적합한 수준입니다',
         Icons.info_outline_rounded,
-        const Color(0xFFEE9B00),
-      );
-    } else if (v >= 90) {
-      return _Status(
-        '주의 구간',
-        '일반 주행은 가능하지만 급가속·고부하 주행은 자제하세요',
-        Icons.warning_amber_rounded,
-        const Color(0xFFFF7A00),
+        Colors.orange,
       );
     } else {
       return _Status(
-        '저옥탄 상태',
-        '노킹 여지가 있어 출력보다 안정 위주로 운행하는 편이 좋습니다',
-        Icons.error_outline_rounded,
-        const Color(0xFFE53935),
+        '일반 상태',
+        '노킹 및 출력 저하 가능성이 있습니다',
+        Icons.warning_amber_rounded,
+        Colors.red,
       );
     }
   }
@@ -282,6 +297,25 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     });
   }
 
+  void _saveCarProfile({
+    required String name,
+    required int year,
+    required double recommend,
+    required double warning,
+  }) {
+    final box = Hive.box<CarProfile>('car_profile');
+
+    box.put(
+      'main',
+      CarProfile(
+        name: name,
+        year: year,
+        recommendedOctane: recommend,
+        warningOctane: warning,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -291,9 +325,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           controller: _tabController,
           indicatorWeight: 4,
           tabs: const [
-            Tab(text: '평균 계산'),
-            Tab(text: '혼합 계산'),
+            Tab(text: '홈'),
             Tab(text: '기록'),
+            Tab(text: '차량'),
           ],
         ),
       ),
@@ -301,9 +335,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         child: TabBarView(
           controller: _tabController,
           children: [
-            _buildAverageTab(),
-            _buildMixedTab(),
+            _buildHomeTab(),
             _buildHistoryTab(),
+            _buildCarTab(),
           ],
         ),
       ),
@@ -316,6 +350,107 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     16,
     MediaQuery.of(context).padding.bottom + 96,
   );
+
+  bool isAverageMode = true;
+
+  Widget _buildHomeTab() {
+    return ListView(
+      padding: _listPadding(context),
+      children: [
+        _sectionTitle('옥탄 계산'),
+        const SizedBox(height: 12),
+
+        // 🔥 모드 선택 (핵심)
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              _modeButton('평균', true),
+              _modeButton('혼합', false),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // 🔥 입력 영역
+        _panelCard(
+          children: isAverageMode
+              ? [
+            _numberField(highFuelCtrl, '고급유(L)', hint: '예: 20'),
+            const SizedBox(height: 14),
+            _numberField(regFuelCtrl, '일반유(L)', hint: '예: 25'),
+          ]
+              : [
+            _numberField(beforeLiterCtrl, '기존 연료(L)', hint: '예: 10'),
+            const SizedBox(height: 14),
+            _numberField(beforeOctaneCtrl, '기존 옥탄가', hint: '예: 95'),
+            const SizedBox(height: 14),
+            _numberField(addLiterCtrl, '추가 연료(L)', hint: '예: 30'),
+            const SizedBox(height: 14),
+            _numberField(addOctaneCtrl, '추가 옥탄가', hint: '예: 98'),
+          ],
+        ),
+
+        const SizedBox(height: 18),
+
+        _calcButton(
+          '옥탄가 계산',
+          onPressed: () {
+            if (isAverageMode) {
+              _onCalcAverage();
+            } else {
+              _onCalcMixed();
+            }
+          },
+        ),
+
+        if ((isAverageMode && _avgResult != null) ||
+            (!isAverageMode && _mixResult != null)) ...[
+          const SizedBox(height: 18),
+          _resultPanel(
+            isAverageMode ? _avgResult! : _mixResult!,
+            isAverageMode ? _avgComment ?? '' : _mixComment ?? '',
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _modeButton(String text, bool isAvg) {
+    final selected = isAverageMode == isAvg;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            isAverageMode = isAvg;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF8B3A3A) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.black87,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildAverageTab() {
     return ListView(
@@ -490,6 +625,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
   Widget _buildOctaneChart(List<OctaneLog> logs) {
     if (logs.isEmpty) return const SizedBox.shrink();
+    final car = Hive.box<CarProfile>('car_profile').get('main');
 
     final spots = List.generate(
       logs.length,
@@ -522,6 +658,18 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (car != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '${car.name} (${car.year}) • 기준 ${car.recommendedOctane}/${car.warningOctane}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -891,7 +1039,76 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       ),
     );
   }
+
+  Widget _buildCarTab() {
+    final car = Hive.box<CarProfile>('car_profile').get('main');
+
+    return ListView(
+      padding: _listPadding(context),
+      children: [
+        _sectionTitle('차량 프로필'),
+        const SizedBox(height: 12),
+
+        if (car != null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '${car.name} (${car.year}) • 기준 ${car.recommendedOctane}/${car.warningOctane}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+
+        const SizedBox(height: 12),
+
+        _panelCard(
+          children: [
+            TextField(
+              controller: carNameCtrl,
+              decoration: const InputDecoration(
+                labelText: '차량명',
+                hintText: '예: 셀토스 1.6T',
+              ),
+            ),
+            const SizedBox(height: 14),
+            _numberField(carYearCtrl, '연식', hint: '예: 2020'),
+            const SizedBox(height: 14),
+            _numberField(carRecCtrl, '권장 옥탄가', hint: '예: 95'),
+            const SizedBox(height: 14),
+            _numberField(carWarnCtrl, '경고 기준', hint: '예: 91'),
+          ],
+        ),
+
+        const SizedBox(height: 18),
+
+        ElevatedButton(
+          onPressed: () {
+            _saveCarProfile(
+              name: carNameCtrl.text,
+              year: int.tryParse(carYearCtrl.text) ?? 0,
+              recommend: double.tryParse(carRecCtrl.text) ?? 95,
+              warning: double.tryParse(carWarnCtrl.text) ?? 91,
+            );
+
+            setState(() {});
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('차량 정보 저장 완료')),
+            );
+          },
+          child: const Text('저장'),
+        ),
+      ],
+    );
+  }
 }
+
+
+
 
 class _Status {
   final String label;
