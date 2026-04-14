@@ -1,4 +1,4 @@
-import 'package:fl_chart/fl_chart.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -7,7 +7,7 @@ import 'history_detail_page.dart';
 import 'model/car_profile.dart';
 import 'model/octane_log.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Hive.initFlutter();
@@ -48,7 +48,7 @@ class OctaneApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: '고급유 노트',
+      title: '怨좉툒???명듃',
       debugShowCheckedModeBanner: false,
       theme: base.copyWith(
         appBarTheme: const AppBarTheme(
@@ -176,6 +176,73 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
   }
+  Future<void> _confirmDeleteLog(int indexFromTop) async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('기록 삭제'),
+            content: const Text('이 기록을 삭제할까요? 삭제 후에는 복구할 수 없습니다.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('삭제'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    final box = Hive.box<OctaneLog>('octane_logs');
+    box.deleteAt(box.length - 1 - indexFromTop);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('기록을 삭제했습니다.')));
+  }
+
+  Future<void> _confirmDeleteCar(Box<CarProfile> box) async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('차량 정보 삭제'),
+            content: const Text('저장된 차량 정보를 삭제할까요? 기준 옥탄가 설정도 함께 지워집니다.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('삭제'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    box.delete('main');
+    carNameCtrl.clear();
+    carYearCtrl.clear();
+    carRecCtrl.clear();
+    carWarnCtrl.clear();
+    carTankCtrl.clear();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('차량 정보를 삭제했습니다.')));
+  }
 
   @override
   void dispose() {
@@ -195,22 +262,34 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     super.dispose();
   }
 
+  double _parseDouble(TextEditingController ctrl) {
+    return double.tryParse(ctrl.text.trim()) ?? 0;
+  }
+
   double _calcAverageOctane() {
-    final high = double.tryParse(highFuelCtrl.text) ?? 0;
-    final reg = double.tryParse(regFuelCtrl.text) ?? 0;
+    final high = _parseDouble(highFuelCtrl);
+    final reg = _parseDouble(regFuelCtrl);
     final total = high + reg;
     if (total <= 0) return 0;
     return ((high * 97) + (reg * 92)) / total;
   }
 
   double _calcMixedOctane() {
-    final beforeL = double.tryParse(beforeLiterCtrl.text) ?? 0;
-    final beforeO = double.tryParse(beforeOctaneCtrl.text) ?? 0;
-    final addL = double.tryParse(addLiterCtrl.text) ?? 0;
-    final addO = double.tryParse(addOctaneCtrl.text) ?? 0;
+    final beforeL = _parseDouble(beforeLiterCtrl);
+    final beforeO = _parseDouble(beforeOctaneCtrl);
+    final addL = _parseDouble(addLiterCtrl);
+    final addO = _parseDouble(addOctaneCtrl);
     final total = beforeL + addL;
     if (total <= 0) return 0;
     return ((beforeL * beforeO) + (addL * addO)) / total;
+  }
+
+  double _mixedTotalLiter() {
+    return _parseDouble(beforeLiterCtrl) + _parseDouble(addLiterCtrl);
+  }
+
+  CarProfile? _mainCar() {
+    return Hive.box<CarProfile>('car_profile').get('main');
   }
 
   void _saveLog({
@@ -230,30 +309,28 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   _Status _status(double v) {
-    final box = Hive.box<CarProfile>('car_profile');
-    final car = box.get('main');
-
+    final car = _mainCar();
     final recommend = car?.recommendedOctane ?? 95;
     final warning = car?.warningOctane ?? 91;
 
     if (v >= recommend) {
-      return _Status(
+      return const _Status(
         '최적 상태',
-        '차량 기준에서 최상의 옥탄가입니다',
+        '차량 기준에서 권장 옥탄가를 충족했습니다.',
         Icons.verified_rounded,
         Colors.green,
       );
     } else if (v >= warning) {
-      return _Status(
-        '일반 상태',
-        '일반 주행에 적합한 수준입니다',
+      return const _Status(
+        '보통 상태',
+        '일상 주행에는 무리가 없지만 여유가 크진 않습니다.',
         Icons.info_outline_rounded,
         Colors.orange,
       );
     } else {
-      return _Status(
+      return const _Status(
         '주의 상태',
-        '노킹 및 출력 저하 가능성이 있습니다',
+        '고부하 주행은 피하고 다음 주유에서 옥탄가를 보강하는 편이 좋습니다.',
         Icons.warning_amber_rounded,
         Colors.red,
       );
@@ -261,42 +338,80 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   String _statusSentence(double v) => _status(v).message;
+  _TankInsight? _tankInsight() {
+    final tankCapacity = _mainCar()?.tankCapacity;
+    if (tankCapacity == null || tankCapacity <= 0) {
+      return null;
+    }
+
+    final total = _mixedTotalLiter();
+    if (total <= 0) {
+      return null;
+    }
+
+    final remaining = tankCapacity - total;
+    if (remaining < 0) {
+      return _TankInsight(
+        title: '탱크 용량 초과',
+        message:
+            '총 ${total.toStringAsFixed(1)}L로 탱크 용량을 ${remaining.abs().toStringAsFixed(1)}L 초과합니다.',
+        color: Colors.red,
+        icon: Icons.warning_amber_rounded,
+        progress: 1,
+      );
+    }
+
+    final usageRatio = (total / tankCapacity).clamp(0.0, 1.0);
+    return _TankInsight(
+      title: '탱크 충전 상태',
+      message:
+          '총 ${total.toStringAsFixed(1)}L로 ${(usageRatio * 100).toStringAsFixed(0)}% 충전됩니다. 여유는 ${remaining.toStringAsFixed(1)}L입니다.',
+      color: Colors.blueGrey,
+      icon: Icons.local_gas_station_rounded,
+      progress: usageRatio,
+    );
+  }
 
   void _onCalcAverage() {
-    final v = _calcAverageOctane();
-    if (v > 0) {
+    final value = _calcAverageOctane();
+    if (value > 0) {
       _saveLog(
         type: 'average',
-        result: v,
+        result: value,
         inputs: {
-          'highLiter': highFuelCtrl.text,
-          'regularLiter': regFuelCtrl.text,
+          'highLiter': highFuelCtrl.text.trim(),
+          'regularLiter': regFuelCtrl.text.trim(),
         },
       );
     }
     setState(() {
-      _avgResult = v;
-      _avgComment = _statusSentence(v);
+      _avgResult = value;
+      _avgComment = _statusSentence(value);
     });
   }
 
   void _onCalcMixed() {
-    final v = _calcMixedOctane();
-    if (v > 0) {
+    final value = _calcMixedOctane();
+    final insight = _tankInsight();
+    if (value > 0) {
       _saveLog(
         type: 'mixed',
-        result: v,
+        result: value,
         inputs: {
-          'beforeLiter': beforeLiterCtrl.text,
-          'beforeOctane': beforeOctaneCtrl.text,
-          'addLiter': addLiterCtrl.text,
-          'addOctane': addOctaneCtrl.text,
+          'beforeLiter': beforeLiterCtrl.text.trim(),
+          'beforeOctane': beforeOctaneCtrl.text.trim(),
+          'addLiter': addLiterCtrl.text.trim(),
+          'addOctane': addOctaneCtrl.text.trim(),
+          if (_mainCar()?.tankCapacity != null)
+            'tankCapacity': _mainCar()!.tankCapacity!.toStringAsFixed(1),
         },
       );
     }
     setState(() {
-      _mixResult = v;
-      _mixComment = _statusSentence(v);
+      _mixResult = value;
+      _mixComment = insight == null
+          ? _statusSentence(value)
+          : '${_statusSentence(value)} ${insight.message}';
     });
   }
 
@@ -316,21 +431,88 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         year: year,
         recommendedOctane: recommend,
         warningOctane: warning,
-        tankCapacity: tank, // 🔥 추가
+        tankCapacity: tank, // ?뵦 異붽?
       ),
     );
+  }
+  Future<void> _confirmDeleteLog(int indexFromTop) async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('기록 삭제'),
+            content: const Text('이 기록을 삭제할까요? 삭제 후에는 복구할 수 없습니다.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('삭제'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    final box = Hive.box<OctaneLog>('octane_logs');
+    box.deleteAt(box.length - 1 - indexFromTop);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('기록을 삭제했습니다.')));
+  }
+
+  Future<void> _confirmDeleteCar(Box<CarProfile> box) async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('차량 정보 삭제'),
+            content: const Text('저장된 차량 정보를 삭제할까요? 기준 옥탄가 설정도 함께 지워집니다.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('삭제'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    box.delete('main');
+    carNameCtrl.clear();
+    carYearCtrl.clear();
+    carRecCtrl.clear();
+    carWarnCtrl.clear();
+    carTankCtrl.clear();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('차량 정보를 삭제했습니다.')));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('고급유 노트'),
+        title: const Text('고급유노트'),
         bottom: TabBar(
           controller: _tabController,
           indicatorWeight: 4,
           tabs: const [
-            Tab(text: '홈'),
+            Tab(text: '계산'),
             Tab(text: '기록'),
             Tab(text: '차량'),
           ],
@@ -359,13 +541,15 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   bool isAverageMode = true;
 
   Widget _buildHomeTab() {
+    final tankInsight = !isAverageMode && _mixResult != null ? _tankInsight() : null;
+
     return ListView(
       padding: _listPadding(context),
       children: [
-        _sectionTitle('옥탄 계산'),
+        _sectionTitle('옥탄가 계산'),
         const SizedBox(height: 12),
 
-        // 🔥 모드 선택 (핵심)
+        // ?뵦 紐⑤뱶 ?좏깮 (?듭떖)
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
@@ -382,24 +566,24 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
         const SizedBox(height: 16),
 
-        // 🔥 입력 영역
+        // ?뵦 ?낅젰 ?곸뿭
         _panelCard(
           children: isAverageMode
               ? [
-            _numberField(highFuelCtrl, '고급유(L)', hint: '예: 20'),
+            _numberField(highFuelCtrl, '고급유 주유량 (L)', hint: '예: 20'),
             const SizedBox(height: 14),
-            _numberField(regFuelCtrl, '일반유(L)', hint: '예: 25'),
+            _numberField(regFuelCtrl, '일반유 주유량 (L)', hint: '예: 25'),
           ]
               : [
-            _numberField(beforeLiterCtrl, '기존 연료(L)', hint: '예: 10'),
+            _numberField(beforeLiterCtrl, '기존 연료량 (L)', hint: '예: 10'),
             const SizedBox(height: 14),
-            _numberField(beforeOctaneCtrl, '기존 옥탄가', hint: '예: 95'),
+            _numberField(beforeOctaneCtrl, '기존 연료 옥탄가', hint: '예: 95'),
             const SizedBox(height: 14),
-            _numberField(addLiterCtrl, '추가 연료(L)', hint: '예: 30'),
+            _numberField(addLiterCtrl, '추가 주유량 (L)', hint: '예: 30'),
             const SizedBox(height: 14),
-            _numberField(addOctaneCtrl, '추가 옥탄가', hint: '예: 98'),
+            _numberField(addOctaneCtrl, '추가 연료 옥탄가', hint: '예: 98'),
             const SizedBox(height: 14),
-            _numberField(carTankCtrl, '연료탱크 용량(L)', hint: '예: 50'),
+            _numberField(carTankCtrl, '탱크 용량 (L)', hint: '예: 50'),
           ],
         ),
 
@@ -423,6 +607,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             isAverageMode ? _avgResult! : _mixResult!,
             isAverageMode ? _avgComment ?? '' : _mixComment ?? '',
           ),
+        ],
+        if (tankInsight != null) ...[
+          const SizedBox(height: 12),
+          _tankInsightCard(tankInsight),
         ],
       ],
     );
@@ -463,13 +651,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return ListView(
       padding: _listPadding(context),
       children: [
-        _sectionTitle('입력'),
+        _sectionTitle('?낅젰'),
         const SizedBox(height: 12),
         _panelCard(
           children: [
-            _numberField(highFuelCtrl, '고급유(L)', hint: '예: 20'),
+            _numberField(highFuelCtrl, '고급유 주유량 (L)', hint: '예: 20'),
             const SizedBox(height: 14),
-            _numberField(regFuelCtrl, '일반유(L)', hint: '예: 25'),
+            _numberField(regFuelCtrl, '일반유 주유량 (L)', hint: '예: 25'),
           ],
         ),
         const SizedBox(height: 18),
@@ -486,17 +674,17 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return ListView(
       padding: _listPadding(context),
       children: [
-        _sectionTitle('입력'),
+        _sectionTitle('?낅젰'),
         const SizedBox(height: 12),
         _panelCard(
           children: [
-            _numberField(beforeLiterCtrl, '기존 연료(L)', hint: '예: 10'),
+            _numberField(beforeLiterCtrl, '기존 연료량 (L)', hint: '예: 10'),
             const SizedBox(height: 14),
-            _numberField(beforeOctaneCtrl, '기존 옥탄가(RON)', hint: '예: 95'),
+            _numberField(beforeOctaneCtrl, '기존 연료 옥탄가 (RON)', hint: '예: 95'),
             const SizedBox(height: 14),
-            _numberField(addLiterCtrl, '추가 연료(L)', hint: '예: 30'),
+            _numberField(addLiterCtrl, '추가 주유량 (L)', hint: '예: 30'),
             const SizedBox(height: 14),
-            _numberField(addOctaneCtrl, '추가 옥탄가(RON)', hint: '예: 98'),
+            _numberField(addOctaneCtrl, '추가 연료 옥탄가 (RON)', hint: '예: 98'),
           ],
         ),
         const SizedBox(height: 18),
@@ -571,6 +759,52 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
+
+  Widget _tankInsightCard(_TankInsight insight) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(insight.icon, size: 18, color: insight.color),
+                const SizedBox(width: 8),
+                Text(
+                  insight.title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: insight.color,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: insight.progress,
+                minHeight: 10,
+                backgroundColor: insight.color.withOpacity(0.10),
+                valueColor: AlwaysStoppedAnimation<Color>(insight.color),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              insight.message,
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w700,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget _statusChip(_Status st) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -632,7 +866,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             const SizedBox(height: 10),
 
             Text(
-              '총 기록 ${logs.length}개',
+              '珥?湲곕줉 ${logs.length}媛?,
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontWeight: FontWeight.w700,
@@ -673,7 +907,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         if (box.isEmpty) {
           return Center(
             child: Text(
-              '저장된 기록이 없습니다',
+              '저장된 기록이 없습니다.',
               style: TextStyle(
                 color: Colors.grey.shade700,
                 fontWeight: FontWeight.w700,
@@ -687,7 +921,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         return ListView(
           padding: _listPadding(context),
           children: [
-            _buildStatsCard(logs), // 🔥 추가
+            _buildStatsCard(logs), // ?뵦 異붽?
             _buildOctaneChart(logs),
             const SizedBox(height: 10),
             ...List.generate(box.length, (index) {
@@ -714,7 +948,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final diff = latest - prev;
     final displayValue = _touchedValue ?? latest;
     final selectedLabel = _selectedSpotIndex != null
-        ? '${_selectedSpotIndex! + 1}번째 기록'
+        ? '${_selectedSpotIndex! + 1}踰덉㎏ 湲곕줉'
         : '최신 기록';
 
     return AnimatedContainer(
@@ -739,7 +973,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                '${car.name} (${car.year}) • 기준 ${car.recommendedOctane}/${car.warningOctane}',
+                '${car.name} (${car.year})  기준 ${car.recommendedOctane}/${car.warningOctane}',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade600,
@@ -768,7 +1002,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${diff >= 0 ? '▲' : '▼'} ${diff.abs().toStringAsFixed(2)}',
+                  '${diff >= 0 ? '+' : '-'} ${diff.abs().toStringAsFixed(2)}',
                   style: TextStyle(
                     color: diff >= 0
                         ? const Color(0xFF43A047)
@@ -808,7 +1042,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
           const SizedBox(height: 4),
           Text(
-            _touchedValue != null ? '선택값 · $selectedLabel' : '최신값 기준',
+            _touchedValue != null ? '선택 값  $selectedLabel' : '최신값 기준',
             style: TextStyle(
               fontSize: 13,
               color: Colors.grey.shade600,
@@ -977,10 +1211,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(24),
-        onLongPress: () {
-          final box = Hive.box<OctaneLog>('octane_logs');
-          box.deleteAt(box.length - 1 - indexFromTop);
-        },
+        onLongPress: () => _confirmDeleteLog(indexFromTop),
         onTap: () {
           Navigator.push(
             context,
@@ -1149,8 +1380,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          '${car.name} (${car.year}) • 기준 ${car.recommendedOctane}/${car.warningOctane}'
-                          '${car.tankCapacity != null ? ' • 탱크 ${car.tankCapacity}L' : ''}',
+                          '${car.name} (${car.year})  기준 ${car.recommendedOctane}/${car.warningOctane}'
+                          '${car.tankCapacity != null ? '  탱크 ${car.tankCapacity}L' : ''}',
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
@@ -1163,7 +1394,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               ),
             if (car == null)
               Text(
-                '아직 저장된 차량이 없습니다',
+                '아직 저장된 차량 정보가 없습니다.',
                 style: TextStyle(
                   color: Colors.grey.shade700,
                   fontWeight: FontWeight.w700,
@@ -1176,17 +1407,17 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   controller: carNameCtrl,
                   decoration: const InputDecoration(
                     labelText: '차량명',
-                    hintText: '예: 셀토스 1.6T',
+                    hintText: '예: 아반떼 N',
                   ),
                 ),
                 const SizedBox(height: 14),
-                _numberField(carYearCtrl, '연식', hint: '예: 2020'),
+                _numberField(carYearCtrl, '연식', hint: '예: 2023'),
                 const SizedBox(height: 14),
                 _numberField(carRecCtrl, '권장 옥탄가', hint: '예: 95'),
                 const SizedBox(height: 14),
-                _numberField(carWarnCtrl, '경고 기준', hint: '예: 91'),
+                _numberField(carWarnCtrl, '경고 기준 옥탄가', hint: '예: 91'),
                 const SizedBox(height: 14),
-                _numberField(carTankCtrl, '연료탱크 용량(L)', hint: '예: 50'),
+                _numberField(carTankCtrl, '탱크 용량 (L)', hint: '예: 50'),
               ],
             ),
             const SizedBox(height: 14),
@@ -1202,15 +1433,15 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 String? error;
                 final currentYear = DateTime.now().year;
                 if (name.isEmpty) {
-                  error = '차량명을 입력해주세요';
+                  error = '차량명을 입력해 주세요.';
                 } else if (year == null || year < 1980 || year > currentYear + 1) {
-                  error = '연식은 1980~${currentYear + 1} 사이로 입력해주세요';
+                  error = '연식은 1980~${currentYear + 1} 사이로 입력해 주세요.';
                 } else if (recommend == null || warning == null) {
-                  error = '권장/경고 옥탄가를 입력해주세요';
+                  error = '권장 옥탄가와 경고 기준을 모두 입력해 주세요.';
                 } else if (warning > recommend) {
-                  error = '경고 기준은 권장 옥탄가보다 높을 수 없습니다';
+                  error = '경고 기준은 권장 옥탄가보다 높을 수 없습니다.';
                 } else if (tank != null && tank <= 0) {
-                  error = '연료탱크 용량은 0보다 커야 합니다';
+                  error = '탱크 용량은 0보다 커야 합니다.';
                 }
 
                 if (error != null) {
@@ -1231,7 +1462,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 FocusScope.of(context).unfocus();
                 ScaffoldMessenger.of(
                   context,
-                ).showSnackBar(const SnackBar(content: Text('차량 정보 저장 완료')));
+                ).showSnackBar(const SnackBar(content: Text('차량 정보를 저장했습니다.')));
               },
               icon: const Icon(Icons.save_rounded),
               label: const Text('차량 정보 저장'),
@@ -1239,17 +1470,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             if (car != null) ...[
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: () {
-                  box.delete('main');
-                  carNameCtrl.clear();
-                  carYearCtrl.clear();
-                  carRecCtrl.clear();
-                  carWarnCtrl.clear();
-                  carTankCtrl.clear();
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('차량 정보 삭제 완료')));
-                },
+                onPressed: () => _confirmDeleteCar(box),
                 icon: const Icon(Icons.delete_outline_rounded),
                 label: const Text('저장된 차량 삭제'),
               ),
@@ -1272,3 +1493,29 @@ class _Status {
 
   const _Status(this.label, this.message, this.icon, this.color);
 }
+
+
+
+
+
+
+
+
+
+
+class _TankInsight {
+  final String title;
+  final String message;
+  final Color color;
+  final IconData icon;
+  final double progress;
+
+  const _TankInsight({
+    required this.title,
+    required this.message,
+    required this.color,
+    required this.icon,
+    required this.progress,
+  });
+}
+
