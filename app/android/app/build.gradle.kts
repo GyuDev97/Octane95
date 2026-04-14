@@ -7,9 +7,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+//val keystoreProperties = Properties()
+//val keystorePropertiesFile = rootProject.file("key.properties")
+//keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 
 android {
     namespace = "com.octane.octane95"
@@ -33,19 +33,19 @@ android {
         versionName = flutter.versionName
     }
 
-    signingConfigs {
+    /*signingConfigs {
         create("release") {
             storeFile = file(keystoreProperties["storeFile"] as String)
             storePassword = keystoreProperties["storePassword"] as String
             keyAlias = keystoreProperties["keyAlias"] as String
             keyPassword = keystoreProperties["keyPassword"] as String
         }
-    }
+    }*/
 
     buildTypes {
         getByName("release") {
             // debug 키 대신 release 서명 사용
-            signingConfig = signingConfigs.getByName("release")
+            //signingConfig = signingConfigs.getByName("release")
         }
     }
 }

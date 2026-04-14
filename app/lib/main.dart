@@ -252,7 +252,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       );
     } else {
       return _Status(
-        '일반 상태',
+        '주의 상태',
         '노킹 및 출력 저하 가능성이 있습니다',
         Icons.warning_amber_rounded,
         Colors.red,
@@ -1117,107 +1117,148 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
-
-  Widget _buildCarTab() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.construction_rounded,
-            size: 60,
-            color: Colors.grey.shade400,
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            '곧 오픈 준비중이에요 🚧',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '차량 프로필 기능은 곧 추가됩니다',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
+  void _fillCarForm(CarProfile car) {
+    carNameCtrl.text = car.name;
+    carYearCtrl.text = car.year.toString();
+    carRecCtrl.text = car.recommendedOctane.toString();
+    carWarnCtrl.text = car.warningOctane.toString();
+    carTankCtrl.text = car.tankCapacity?.toString() ?? '';
   }
-  /*
-  Widget _buildCarTab() {
-    final car = Hive.box<CarProfile>('car_profile').get('main');
-    if (car != null) {
-      carTankCtrl.text = car.tankCapacity?.toString() ?? '';
-    }
-    return ListView(
-      padding: _listPadding(context),
-      children: [
-        _sectionTitle('차량 프로필'),
-        const SizedBox(height: 12),
 
-        if (car != null)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                '${car.name} (${car.year}) • 기준 ${car.recommendedOctane}/${car.warningOctane}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
+  Widget _buildCarTab() {
+    return ValueListenableBuilder(
+      valueListenable: Hive.box<CarProfile>('car_profile').listenable(),
+      builder: (context, Box<CarProfile> box, _) {
+        final car = box.get('main');
+        if (car != null && carNameCtrl.text.isEmpty) {
+          _fillCarForm(car);
+        }
+
+        return ListView(
+          padding: _listPadding(context),
+          children: [
+            _sectionTitle('차량 프로필'),
+            const SizedBox(height: 12),
+            if (car != null)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.directions_car_rounded),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${car.name} (${car.year}) • 기준 ${car.recommendedOctane}/${car.warningOctane}'
+                          '${car.tankCapacity != null ? ' • 탱크 ${car.tankCapacity}L' : ''}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
-
-        const SizedBox(height: 12),
-
-        _panelCard(
-          children: [
-            TextField(
-              controller: carNameCtrl,
-              decoration: const InputDecoration(
-                labelText: '차량명',
-                hintText: '예: 셀토스 1.6T',
+            if (car == null)
+              Text(
+                '아직 저장된 차량이 없습니다',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
+            const SizedBox(height: 12),
+            _panelCard(
+              children: [
+                TextField(
+                  controller: carNameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '차량명',
+                    hintText: '예: 셀토스 1.6T',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _numberField(carYearCtrl, '연식', hint: '예: 2020'),
+                const SizedBox(height: 14),
+                _numberField(carRecCtrl, '권장 옥탄가', hint: '예: 95'),
+                const SizedBox(height: 14),
+                _numberField(carWarnCtrl, '경고 기준', hint: '예: 91'),
+                const SizedBox(height: 14),
+                _numberField(carTankCtrl, '연료탱크 용량(L)', hint: '예: 50'),
+              ],
             ),
             const SizedBox(height: 14),
-            _numberField(carYearCtrl, '연식', hint: '예: 2020'),
-            const SizedBox(height: 14),
-            _numberField(carRecCtrl, '권장 옥탄가', hint: '예: 95'),
-            const SizedBox(height: 14),
-            _numberField(carWarnCtrl, '경고 기준', hint: '예: 91'),
+            ElevatedButton.icon(
+              onPressed: () {
+                final name = carNameCtrl.text.trim();
+                final year = int.tryParse(carYearCtrl.text.trim());
+                final recommend = double.tryParse(carRecCtrl.text.trim());
+                final warning = double.tryParse(carWarnCtrl.text.trim());
+                final tankText = carTankCtrl.text.trim();
+                final tank = tankText.isEmpty ? null : double.tryParse(tankText);
+
+                String? error;
+                final currentYear = DateTime.now().year;
+                if (name.isEmpty) {
+                  error = '차량명을 입력해주세요';
+                } else if (year == null || year < 1980 || year > currentYear + 1) {
+                  error = '연식은 1980~${currentYear + 1} 사이로 입력해주세요';
+                } else if (recommend == null || warning == null) {
+                  error = '권장/경고 옥탄가를 입력해주세요';
+                } else if (warning > recommend) {
+                  error = '경고 기준은 권장 옥탄가보다 높을 수 없습니다';
+                } else if (tank != null && tank <= 0) {
+                  error = '연료탱크 용량은 0보다 커야 합니다';
+                }
+
+                if (error != null) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(error)));
+                  return;
+                }
+
+                _saveCarProfile(
+                  name: name,
+                  year: year!,
+                  recommend: recommend!,
+                  warning: warning!,
+                  tank: tank,
+                );
+
+                FocusScope.of(context).unfocus();
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('차량 정보 저장 완료')));
+              },
+              icon: const Icon(Icons.save_rounded),
+              label: const Text('차량 정보 저장'),
+            ),
+            if (car != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () {
+                  box.delete('main');
+                  carNameCtrl.clear();
+                  carYearCtrl.clear();
+                  carRecCtrl.clear();
+                  carWarnCtrl.clear();
+                  carTankCtrl.clear();
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('차량 정보 삭제 완료')));
+                },
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('저장된 차량 삭제'),
+              ),
+            ],
           ],
-        ),
-
-        const SizedBox(height: 18),
-
-        ElevatedButton(
-          onPressed: () {
-            _saveCarProfile(
-              name: carNameCtrl.text,
-              year: int.tryParse(carYearCtrl.text) ?? 0,
-              recommend: double.tryParse(carRecCtrl.text) ?? 95,
-              warning: double.tryParse(carWarnCtrl.text) ?? 91,
-              tank: double.tryParse(carTankCtrl.text), // 🔥 추가
-            );
-
-            setState(() {});
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('차량 정보 저장 완료')),
-            );
-          },
-          child: const Text('저장'),
-        ),
-      ],
+        );
+      },
     );
-  }*/
+  }
 }
 
 

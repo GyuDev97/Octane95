@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+import 'model/car_profile.dart';
 import 'model/octane_log.dart';
 
 class HistoryDetailPage extends StatelessWidget {
@@ -126,14 +129,16 @@ class HistoryDetailPage extends StatelessWidget {
   }
 
   _DetailStatus _status(double v) {
-    if (v >= 95) {
-      return _DetailStatus("안정", "일반·고속 주행 모두 무난합니다", Colors.green);
-    } else if (v >= 92) {
-      return _DetailStatus("보통", "일상 주행에는 문제 없습니다", Colors.orange);
-    } else if (v >= 90) {
-      return _DetailStatus("주의", "급가속·고회전은 자제하세요", Colors.deepOrange);
+    final car = Hive.box<CarProfile>('car_profile').get('main');
+    final recommend = car?.recommendedOctane ?? 95;
+    final warning = car?.warningOctane ?? 91;
+
+    if (v >= recommend) {
+      return _DetailStatus("최적", "차량 기준에서 최상의 옥탄가입니다", Colors.green);
+    } else if (v >= warning) {
+      return _DetailStatus("일반", "일상 주행에는 문제 없습니다", Colors.orange);
     } else {
-      return _DetailStatus("위험", "노킹 가능성이 있으니 주의하세요", Colors.red);
+      return _DetailStatus("주의", "노킹 가능성이 있으니 주의하세요", Colors.red);
     }
   }
 }
