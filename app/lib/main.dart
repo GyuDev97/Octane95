@@ -435,74 +435,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       ),
     );
   }
-  Future<void> _confirmDeleteLog(int indexFromTop) async {
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('기록 삭제'),
-            content: const Text('이 기록을 삭제할까요? 삭제 후에는 복구할 수 없습니다.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('취소'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('삭제'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
-    if (!confirmed) return;
-
-    final box = Hive.box<OctaneLog>('octane_logs');
-    box.deleteAt(box.length - 1 - indexFromTop);
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('기록을 삭제했습니다.')));
-  }
-
-  Future<void> _confirmDeleteCar(Box<CarProfile> box) async {
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('차량 정보 삭제'),
-            content: const Text('저장된 차량 정보를 삭제할까요? 기준 옥탄가 설정도 함께 지워집니다.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('취소'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('삭제'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
-    if (!confirmed) return;
-
-    box.delete('main');
-    carNameCtrl.clear();
-    carYearCtrl.clear();
-    carRecCtrl.clear();
-    carWarnCtrl.clear();
-    carTankCtrl.clear();
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('차량 정보를 삭제했습니다.')));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -866,7 +798,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             const SizedBox(height: 10),
 
             Text(
-              '珥?湲곕줉 ${logs.length}媛?,
+              '총 기록 ${logs.length}개',
               style: TextStyle(
                 color: Colors.grey.shade600,
                 fontWeight: FontWeight.w700,

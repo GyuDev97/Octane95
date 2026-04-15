@@ -1,6 +1,9 @@
 # octane95
 
-A new Flutter project.
+##spec
+- flutter 3.38.10
+- JDK21
+
 
 ## Getting Started
 
