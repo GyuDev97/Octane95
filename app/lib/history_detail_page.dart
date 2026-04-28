@@ -17,6 +17,13 @@ class HistoryDetailPage extends StatelessWidget {
     'addLiter': '추가 주유량 (L)',
     'addOctane': '추가 연료 옥탄가',
     'tankCapacity': '탱크 용량 (L)',
+    'targetOctane': '목표 옥탄가',
+    'currentLiter': '현재 남은 연료량 (L)',
+    'currentOctane': '현재 추정 옥탄가',
+    'fuelOctane': '넣을 연료 옥탄가',
+    'requiredLiter': '필요 주유량 (L)',
+    'unitPrice': '리터당 단가 (원)',
+    'totalCost': '총 주유 금액 (원)',
   };
 
   @override
@@ -33,7 +40,7 @@ class HistoryDetailPage extends StatelessWidget {
           _infoCard(
             title: '계산 정보',
             children: [
-              _row('계산 방식', log.type == 'average' ? '평균 계산' : '혼합 계산'),
+              _row('계산 방식', _typeTitle(log.type)),
               _row(
                 '계산 시각',
                 '${log.time.year}.${log.time.month.toString().padLeft(2, '0')}.${log.time.day.toString().padLeft(2, '0')} '
@@ -49,6 +56,22 @@ class HistoryDetailPage extends StatelessWidget {
               return _row(label, entry.value.toString());
             }).toList(),
           ),
+          if (log.memo.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _infoCard(
+              title: '메모',
+              children: [
+                Text(
+                  log.memo,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -131,6 +154,19 @@ class HistoryDetailPage extends StatelessWidget {
     );
   }
 
+  String _typeTitle(String type) {
+    switch (type) {
+      case 'average':
+        return '단순 계산';
+      case 'mixed':
+        return '탱크 혼합 계산';
+      case 'target':
+        return '목표 맞추기';
+      default:
+        return type;
+    }
+  }
+
   _DetailStatus _status(double value) {
     final car = Hive.box<CarProfile>('car_profile').get('main');
     final recommend = car?.recommendedOctane ?? 95;
@@ -138,19 +174,19 @@ class HistoryDetailPage extends StatelessWidget {
 
     if (value >= recommend) {
       return const _DetailStatus(
-        '최적',
+        '권장 기준 충족',
         '차량 기준에서 권장 옥탄가를 충족한 상태입니다.',
         Colors.green,
       );
     } else if (value >= warning) {
       return const _DetailStatus(
-        '보통',
+        '일반 주행 적합',
         '일상 주행에는 무리가 없지만 다음 주유에서 보강하면 더 좋습니다.',
         Colors.orange,
       );
     } else {
       return const _DetailStatus(
-        '주의',
+        '고부하 주행 주의',
         '노킹 가능성을 줄이기 위해 고부하 주행을 피하고 옥탄가를 보강해 주세요.',
         Colors.red,
       );
