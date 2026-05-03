@@ -80,15 +80,15 @@ class OctaneApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            minimumSize: const Size.fromHeight(60),
+            minimumSize: const Size.fromHeight(54),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(8),
             ),
             backgroundColor: _brandDark,
             foregroundColor: Colors.white,
             elevation: 0,
             textStyle: const TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -182,6 +182,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   String? _targetComment;
   bool _targetImpossible = false;
 
+  int _currentMainTab = 0;
   double? _touchedValue;
   int? _selectedSpotIndex;
 
@@ -189,6 +190,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_syncMainTab);
+  }
+
+  void _syncMainTab() {
+    if (_currentMainTab == _tabController.index) return;
+    setState(() {
+      _currentMainTab = _tabController.index;
+    });
   }
   Future<void> _confirmDeleteLog(int indexFromTop) async {
     final confirmed =
@@ -260,6 +269,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
   @override
   void dispose() {
+    _tabController.removeListener(_syncMainTab);
     _tabController.dispose();
     highFuelCtrl.dispose();
     regFuelCtrl.dispose();
@@ -441,7 +451,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
   void _onCalcMixed() {
     final value = _calcMixedOctane();
-    final insight = _tankInsight();
     if (value > 0) {
       _saveLog(
         type: 'mixed',
@@ -462,9 +471,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     }
     setState(() {
       _mixResult = value;
-      _mixComment = insight == null
-          ? _statusSentence(value)
-          : '${_statusSentence(value)} ${insight.message}';
+      _mixComment = _statusSentence(value);
     });
   }
 
@@ -548,6 +555,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return Scaffold(
       appBar: AppBar(
         title: const Text('고급유노트'),
+        actions: [
+          IconButton(
+            tooltip: '차량 설정',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => _tabController.animateTo(2),
+          ),
+          const SizedBox(width: 8),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorWeight: 4,
@@ -557,6 +572,36 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             Tab(text: '차량'),
           ],
         ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentMainTab,
+        height: 72,
+        backgroundColor: Colors.white,
+        indicatorColor: const Color(0xFFF2DCDD),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (index) {
+          setState(() {
+            _currentMainTab = index;
+          });
+          _tabController.animateTo(index);
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.calculate_outlined),
+            selectedIcon: Icon(Icons.calculate_rounded),
+            label: '계산',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_rounded),
+            selectedIcon: Icon(Icons.bar_chart_rounded),
+            label: '기록',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.directions_car_outlined),
+            selectedIcon: Icon(Icons.directions_car_rounded),
+            label: '차량',
+          ),
+        ],
       ),
       body: SafeArea(
         child: TabBarView(
@@ -585,69 +630,216 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   bool get _isTargetMode => _calcMode == 2;
 
   Widget _buildHomeTab() {
-    final tankInsight = _isMixedMode && _mixResult != null ? _tankInsight() : null;
-
     return ListView(
       padding: _listPadding(context),
       children: [
-        _sectionTitle('옥탄가 계산'),
-        const SizedBox(height: 12),
-
-        // ?뵦 紐⑤뱶 ?좏깮 (?듭떖)
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              _modeButton('단순', 0),
-              _modeButton('탱크', 1),
-              _modeButton('목표', 2),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        _panelCard(children: _calculationFields()),
-        const SizedBox(height: 12),
-        _optionalRecordCard(),
-
-        const SizedBox(height: 18),
-
-        _calcButton(
-          _calcButtonText(),
-          onPressed: () {
-            if (_isAverageMode) {
-              _onCalcAverage();
-            } else if (_isMixedMode) {
-              _onCalcMixed();
-            } else {
-              _onCalcTarget();
-            }
-          },
-        ),
-
-        if ((_isAverageMode && _avgResult != null) ||
-            (_isMixedMode && _mixResult != null)) ...[
-          const SizedBox(height: 18),
-          _resultPanel(
-            _isAverageMode ? _avgResult! : _mixResult!,
-            _isAverageMode ? _avgComment ?? '' : _mixComment ?? '',
-          ),
-        ],
+        _currentOctaneCard(),
         if (_isTargetMode &&
             (_targetRequiredLiter != null || _targetComment != null)) ...[
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           _targetResultPanel(),
         ],
-        if (tankInsight != null) ...[
-          const SizedBox(height: 12),
-          _tankInsightCard(tankInsight),
-        ],
+        const SizedBox(height: 12),
+        _inputInfoCard(),
+        const SizedBox(height: 16),
+        _calcButton(_calcButtonText(), onPressed: _runCurrentCalculation),
       ],
+    );
+  }
+
+  void _runCurrentCalculation() {
+    if (_isAverageMode) {
+      _onCalcAverage();
+    } else if (_isMixedMode) {
+      _onCalcMixed();
+    } else {
+      _onCalcTarget();
+    }
+  }
+
+  double _currentOctaneValue() {
+    if (_isAverageMode && _avgResult != null) return _avgResult!;
+    if (_isMixedMode && _mixResult != null) return _mixResult!;
+    if (_isTargetMode) {
+      final current = _parseDouble(targetCurrentOctaneCtrl);
+      if (current > 0) return current;
+    }
+    return _mainCar()?.recommendedOctane ?? 95;
+  }
+
+  double? _previousOctaneValue() {
+    final box = Hive.box<OctaneLog>('octane_logs');
+    if (box.isEmpty) return null;
+    final currentResultVisible = (_isAverageMode && _avgResult != null) ||
+        (_isMixedMode && _mixResult != null) ||
+        (_isTargetMode && _targetComment != null);
+    if (currentResultVisible && box.length > 1) {
+      return box.values.elementAt(box.length - 2).result;
+    }
+    return box.values.last.result;
+  }
+
+  Widget _currentOctaneCard() {
+    final value = _currentOctaneValue();
+    final status = _status(value);
+    final previous = _previousOctaneValue();
+    final diff = previous == null ? null : value - previous;
+    final diffColor = diff == null || diff >= 0
+        ? Colors.white.withOpacity(0.88)
+        : const Color(0xFFFFB4A7);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 17),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFAB4C4F),
+            Color(0xFF732D31),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7E3335).withOpacity(0.22),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              const Text(
+                '현재 옥탄가',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.help_outline_rounded,
+                color: Colors.white.withOpacity(0.38),
+                size: 16,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: value - 0.45, end: value),
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeOutCubic,
+            builder: (context, animatedValue, _) {
+              return Text(
+                animatedValue.toStringAsFixed(2),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 54,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          _filledStatusChip(status),
+          const SizedBox(height: 16),
+          Text(
+            diff == null
+                ? status.message
+                : '${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(2)} (이전 대비)',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: diffColor,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filledStatusChip(_Status status) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: status.color,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(status.icon, color: Colors.white, size: 16),
+          const SizedBox(width: 7),
+          Text(
+            status.label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _inputInfoCard() {
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 3,
+      shadowColor: Colors.black.withOpacity(0.06),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '입력 정보',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Icon(Icons.expand_less_rounded, color: Colors.grey.shade700),
+              ],
+            ),
+            const SizedBox(height: 14),
+            ..._calculationFields(),
+            const SizedBox(height: 16),
+            _modeSelector(),
+            const SizedBox(height: 14),
+            _optionalRecordCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0EEEE),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          _modeButton('단순', 0),
+          _modeButton('탱크', 1),
+          _modeButton('목표', 2),
+        ],
+      ),
     );
   }
 
@@ -703,10 +895,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
             color: selected ? const Color(0xFF8B3A3A) : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(7),
           ),
           child: Center(
             child: Text(
@@ -775,39 +967,41 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   Widget _optionalRecordCard() {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: Card(
-        elevation: 0,
-        color: Colors.white.withOpacity(0.72),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 18),
-          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-          leading: const Icon(Icons.receipt_long_rounded),
-          title: const Text(
-            '기록 정보',
-            style: TextStyle(fontWeight: FontWeight.w900),
-          ),
-          subtitle: const Text('단가, 총액, 메모 선택 입력'),
-          children: [
-            _numberField(priceCtrl, '리터당 단가 (원)', hint: '예: 1890'),
-            const SizedBox(height: 14),
-            _numberField(totalCostCtrl, '총 주유 금액 (원)', hint: '예: 70000'),
-            const SizedBox(height: 14),
-            TextField(
-              controller: memoCtrl,
-              minLines: 2,
-              maxLines: 4,
-              textInputAction: TextInputAction.newline,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-              decoration: const InputDecoration(
-                labelText: '메모',
-                hintText: '예: 노킹 없음, 출력 괜찮음',
-              ),
-            ),
-          ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFAF9F8),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE7DFDB)),
         ),
+        child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+            childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            leading: const Icon(Icons.receipt_long_rounded),
+            title: const Text(
+              '기록 정보',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: const Text('단가, 총액, 메모 선택 입력'),
+            children: [
+              _numberField(priceCtrl, '리터당 단가 (원)', hint: '예: 1890'),
+              const SizedBox(height: 14),
+              _numberField(totalCostCtrl, '총 주유 금액 (원)', hint: '예: 70000'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: memoCtrl,
+                minLines: 2,
+                maxLines: 4,
+                textInputAction: TextInputAction.newline,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+                decoration: const InputDecoration(
+                  labelText: '메모',
+                  hintText: '예: 노킹 없음, 출력 괜찮음',
+                ),
+              ),
+            ]),
       ),
     );
   }
@@ -1033,9 +1227,12 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final min = values.reduce((a, b) => a < b ? a : b);
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.zero,
+      elevation: 3,
+      shadowColor: Colors.black.withOpacity(0.06),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1046,24 +1243,36 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 12),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _statItem('평균', avg),
-                _statItem('최고', max),
-                _statItem('최저', min),
-              ],
+            const SizedBox(height: 22),
+            IntrinsicHeight(
+              child: Row(
+                children: [
+                  Expanded(child: _statItem('평균', avg, Colors.black87)),
+                  const VerticalDivider(color: Color(0xFFE7DFDB), width: 1),
+                  Expanded(
+                    child: _statItem(
+                      '최고',
+                      max,
+                      const Color(0xFF8B2F32),
+                    ),
+                  ),
+                  const VerticalDivider(color: Color(0xFFE7DFDB), width: 1),
+                  Expanded(
+                    child: _statItem(
+                      '최저',
+                      min,
+                      const Color(0xFF2C83C8),
+                    ),
+                  ),
+                ],
+              ),
             ),
-
-            const SizedBox(height: 10),
-
+            const SizedBox(height: 20),
             Text(
               '총 기록 ${logs.length}개',
               style: TextStyle(
                 color: Colors.grey.shade600,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],
@@ -1072,7 +1281,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
-  Widget _statItem(String title, double value) {
+  Widget _statItem(String title, double value, Color valueColor) {
     return Column(
       children: [
         Text(
@@ -1085,8 +1294,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         const SizedBox(height: 6),
         Text(
           value.toStringAsFixed(2),
-          style: const TextStyle(
-            fontSize: 18,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 22,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -1115,13 +1325,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         return ListView(
           padding: _listPadding(context),
           children: [
-            _buildStatsCard(logs), // ?뵦 異붽?
+            _buildStatsCard(logs),
+            const SizedBox(height: 14),
             _buildOctaneChart(logs),
-            const SizedBox(height: 10),
-            ...List.generate(box.length, (index) {
-              final log = box.getAt(box.length - 1 - index)!;
-              return _historyItem(log, indexFromTop: index);
-            }),
+            const SizedBox(height: 14),
+            _targetMatchCard(logs.last),
+            const SizedBox(height: 14),
+            _historyListCard(logs),
           ],
         );
       },
@@ -1131,27 +1341,30 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   Widget _buildOctaneChart(List<OctaneLog> logs) {
     if (logs.isEmpty) return const SizedBox.shrink();
     final car = Hive.box<CarProfile>('car_profile').get('main');
+    final target = car?.recommendedOctane ?? 95;
+    final chartLogs = logs.length > 5 ? logs.sublist(logs.length - 5) : logs;
 
     final spots = List.generate(
-      logs.length,
-          (i) => FlSpot(i.toDouble(), logs[i].result),
+      chartLogs.length,
+          (i) => FlSpot(i.toDouble(), chartLogs[i].result),
     );
 
-    final latest = logs.last.result;
-    final prev = logs.length > 1 ? logs[logs.length - 2].result : latest;
+    final latest = chartLogs.last.result;
+    final prev = chartLogs.length > 1 ? chartLogs[chartLogs.length - 2].result : latest;
     final diff = latest - prev;
     final displayValue = _touchedValue ?? latest;
     final selectedLabel = _selectedSpotIndex != null
         ? '${_selectedSpotIndex! + 1}번째 기록'
         : '최신 기록';
+    final status = _status(displayValue);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -1163,52 +1376,55 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (car != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                '${car.name} (${car.year})  기준 ${car.recommendedOctane}/${car.warningOctane}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 '최근 옥탄가',
                 style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade700,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF151823),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                 decoration: BoxDecoration(
                   color: (diff >= 0
-                      ? const Color(0xFF4CAF50)
-                      : const Color(0xFFE53935))
+                      ? const Color(0xFF2C83C8)
+                      : const Color(0xFFC3363B))
                       .withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
-                  '${diff >= 0 ? '+' : '-'} ${diff.abs().toStringAsFixed(2)}',
-                  style: TextStyle(
-                    color: diff >= 0
-                        ? const Color(0xFF43A047)
-                        : const Color(0xFFD32F2F),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      diff >= 0
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                      size: 17,
+                      color: diff >= 0
+                          ? const Color(0xFF2C83C8)
+                          : const Color(0xFFC3363B),
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${diff >= 0 ? '+' : '-'}${diff.abs().toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: diff >= 0
+                            ? const Color(0xFF2C83C8)
+                            : const Color(0xFFC3363B),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 18),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
             transitionBuilder: (child, animation) {
@@ -1227,14 +1443,15 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               displayValue.toStringAsFixed(2),
               key: ValueKey('${displayValue.toStringAsFixed(2)}_${_selectedSpotIndex ?? -1}'),
               style: const TextStyle(
-                fontSize: 34,
+                fontSize: 38,
                 fontWeight: FontWeight.w900,
-                color: Colors.black87,
-                letterSpacing: -1.0,
+                color: Color(0xFF151823),
               ),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
+          _softStatusChip(status),
+          const SizedBox(height: 12),
           Text(
             _touchedValue != null ? '선택 값  $selectedLabel' : '최신값 기준',
             style: TextStyle(
@@ -1245,28 +1462,94 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
           const SizedBox(height: 18),
           SizedBox(
-            height: 172,
+            height: 218,
             child: LineChart(
               LineChartData(
                 minX: -0.1,
                 maxX: spots.length - 1 + 0.1,
-                minY: 88,
-                maxY: 100,
+                minY: 90,
+                maxY: 99,
                 clipData: const FlClipData.all(),
                 borderData: FlBorderData(show: false),
-                titlesData: const FlTitlesData(show: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 2,
+                      reservedSize: 28,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          value.toInt().toString(),
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.round();
+                        if (index < 0 || index >= chartLogs.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            '${chartLogs[index].time.month}/${chartLogs[index].time.day}',
+                            style: const TextStyle(
+                              color: Color(0xFF343A46),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: false,
-                  horizontalInterval: 4,
+                  horizontalInterval: 2,
                   getDrawingHorizontalLine: (value) {
                     return FlLine(
-                      color: Colors.grey.withOpacity(0.10),
+                      color: Colors.grey.withOpacity(0.16),
                       strokeWidth: 1,
                     );
                   },
                 ),
                 extraLinesData: ExtraLinesData(
+                  horizontalLines: [
+                    HorizontalLine(
+                      y: target,
+                      color: const Color(0xFFC83E43).withOpacity(0.42),
+                      strokeWidth: 1,
+                      dashArray: [4, 3],
+                      label: HorizontalLineLabel(
+                        show: true,
+                        alignment: Alignment.centerRight,
+                        labelResolver: (_) => '${target.toStringAsFixed(0)} (목표)',
+                        style: const TextStyle(
+                          color: Color(0xFFC83E43),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
                   verticalLines: _selectedSpotIndex != null
                       ? [
                     VerticalLine(
@@ -1336,8 +1619,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                     isCurved: true,
                     curveSmoothness: 0.20,
                     preventCurveOverShooting: true,
-                    color: Colors.deepOrange.shade500,
-                    barWidth: 4,
+                    color: const Color(0xFFC83E43),
+                    barWidth: 3,
                     isStrokeCapRound: true,
                     dotData: FlDotData(
                       show: true,
@@ -1348,7 +1631,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                         if (isSelected) {
                           return FlDotCirclePainter(
                             radius: 7.5,
-                            color: Colors.deepOrange.shade500,
+                            color: const Color(0xFFC83E43),
                             strokeWidth: 4,
                             strokeColor: Colors.white,
                           );
@@ -1357,7 +1640,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                         if (isLatest) {
                           return FlDotCirclePainter(
                             radius: 5.5,
-                            color: Colors.deepOrange.shade500,
+                            color: const Color(0xFFC83E43),
                             strokeWidth: 2,
                             strokeColor: Colors.white,
                           );
@@ -1367,15 +1650,15 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                           radius: 4.5,
                           color: Colors.white,
                           strokeWidth: 2.6,
-                          strokeColor: Colors.deepOrange.shade500,
+                          strokeColor: const Color(0xFFC83E43),
                         );
                       },
                     ),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: Colors.deepOrange.withOpacity(0.08),
+                      color: const Color(0xFFC83E43).withOpacity(0.09),
                       applyCutOffY: true,
-                      cutOffY: 88,
+                      cutOffY: 90,
                     ),
                   ),
                 ],
@@ -1387,6 +1670,263 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         ],
       ),
     );
+  }
+
+  Widget _targetMatchCard(OctaneLog latest) {
+    final status = _status(latest.result);
+    final brand = Theme.of(context).colorScheme.primary;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 3,
+      shadowColor: Colors.black.withOpacity(0.06),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '목표 맞추기',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: brand.withOpacity(0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.flag_rounded, color: brand, size: 30),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _dateOnly(latest.time),
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _statusChip(status),
+                    ],
+                  ),
+                ),
+                Text(
+                  latest.result.toStringAsFixed(2),
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF151823),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _softStatusChip(_Status st) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: st.color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        st.label,
+        style: TextStyle(
+          color: st.color,
+          fontSize: 13,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _historyListCard(List<OctaneLog> logs) {
+    final recent = logs.reversed.take(3).toList();
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 3,
+      shadowColor: Colors.black.withOpacity(0.06),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                '기록 목록',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(height: 14),
+            ...List.generate(recent.length, (index) {
+              return _compactHistoryItem(
+                recent[index],
+                previous: _previousForRecent(logs, index),
+                indexFromTop: index,
+              );
+            }),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _showAllHistory(logs),
+              icon: const Icon(Icons.list_rounded),
+              label: const Text('전체 기록 보기'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                foregroundColor: const Color(0xFF312827),
+                side: const BorderSide(color: Color(0xFFE0D8D4)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _compactHistoryItem(
+    OctaneLog log, {
+    required double? previous,
+    required int indexFromTop,
+  }) {
+    final diff = previous == null ? 0 : log.result - previous;
+    final isUp = diff >= 0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Color(0xFFE8E1DD)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onLongPress: () => _confirmDeleteLog(indexFromTop),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => HistoryDetailPage(log: log)),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _dateTimeShort(log.time),
+                    style: const TextStyle(
+                      color: Color(0xFF343A46),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  log.result.toStringAsFixed(2),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF151823),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _diffPill(diff, isUp),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.grey.shade500,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _diffPill(double diff, bool isUp) {
+    final color = isUp ? const Color(0xFF2C83C8) : const Color(0xFFC3363B);
+    final icon = isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 2),
+          Text(
+            '${isUp ? '+' : '-'}${diff.abs().toStringAsFixed(2)}',
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAllHistory(List<OctaneLog> logs) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final recent = logs.reversed.toList();
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          children: List.generate(recent.length, (index) {
+            return _compactHistoryItem(
+              recent[index],
+              previous: _previousForRecent(logs, index),
+              indexFromTop: index,
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  double? _previousForRecent(List<OctaneLog> logs, int indexFromTop) {
+    final originalIndex = logs.length - 1 - indexFromTop;
+    if (originalIndex <= 0) return null;
+    return logs[originalIndex - 1].result;
+  }
+
+  String _dateOnly(DateTime time) {
+    return '${time.year}.${time.month.toString().padLeft(2, '0')}.${time.day.toString().padLeft(2, '0')}';
+  }
+
+  String _dateTimeShort(DateTime time) {
+    return '${_dateOnly(time)} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _historyItem(OctaneLog log, {required int indexFromTop}) {
