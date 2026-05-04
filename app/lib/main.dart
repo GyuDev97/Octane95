@@ -658,25 +658,15 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   double _currentOctaneValue() {
-    if (_isAverageMode && _avgResult != null) return _avgResult!;
-    if (_isMixedMode && _mixResult != null) return _mixResult!;
-    if (_isTargetMode) {
-      final current = _parseDouble(targetCurrentOctaneCtrl);
-      if (current > 0) return current;
-    }
+    final box = Hive.box<OctaneLog>('octane_logs');
+    if (box.isNotEmpty) return box.values.last.result;
     return _mainCar()?.recommendedOctane ?? 95;
   }
 
   double? _previousOctaneValue() {
     final box = Hive.box<OctaneLog>('octane_logs');
-    if (box.isEmpty) return null;
-    final currentResultVisible = (_isAverageMode && _avgResult != null) ||
-        (_isMixedMode && _mixResult != null) ||
-        (_isTargetMode && _targetComment != null);
-    if (currentResultVisible && box.length > 1) {
-      return box.values.elementAt(box.length - 2).result;
-    }
-    return box.values.last.result;
+    if (box.length < 2) return null;
+    return box.values.elementAt(box.length - 2).result;
   }
 
   Widget _currentOctaneCard() {
@@ -1810,7 +1800,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     required double? previous,
     required int indexFromTop,
   }) {
-    final diff = previous == null ? 0 : log.result - previous;
+    final double diff = previous == null ? 0.0 : log.result - previous;
     final isUp = diff >= 0;
 
     return Padding(
