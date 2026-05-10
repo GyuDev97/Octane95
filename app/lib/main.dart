@@ -388,14 +388,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       );
     } else if (v >= warning) {
       return const _Status(
-        '일반 주행 적합',
+        '보통',
         '일상 주행은 가능하지만 권장 옥탄가까지 여유가 크진 않습니다.',
         Icons.info_outline_rounded,
         Colors.orange,
       );
     } else {
       return const _Status(
-        '고부하 주행 주의',
+        '주의',
         '고부하 주행은 피하고 다음 주유에서 옥탄가를 보강하는 편이 좋습니다.',
         Icons.warning_amber_rounded,
         Colors.red,
@@ -680,13 +680,23 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   bool get _isMixedMode => _calcMode == 1;
   bool get _isTargetMode => _calcMode == 2;
 
+  bool get _hasPendingResult {
+    return (_isAverageMode && _avgResult != null) ||
+        (_isMixedMode && _mixResult != null) ||
+        (_isTargetMode &&
+            (_targetRequiredLiter != null || _targetComment != null));
+  }
+
+  bool get _shouldExpandInput {
+    return !_hasPendingResult ||
+        (_isTargetMode && _targetImpossible && _targetRequiredLiter == null);
+  }
+
   Widget _buildHomeTab() {
     return ListView(
       padding: _listPadding(context),
       children: [
-        _currentOctaneCard(),
         if (_isAverageMode && _avgResult != null) ...[
-          const SizedBox(height: 12),
           _resultPanel(
             _avgResult!,
             _avgComment ?? '',
@@ -694,7 +704,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
         ],
         if (_isMixedMode && _mixResult != null) ...[
-          const SizedBox(height: 12),
           _resultPanel(
             _mixResult!,
             _mixComment ?? '',
@@ -703,14 +712,145 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         ],
         if (_isTargetMode &&
             (_targetRequiredLiter != null || _targetComment != null)) ...[
-          const SizedBox(height: 12),
           _targetResultPanel(),
+        ],
+        if (!_hasPendingResult) _currentOctaneCard(),
+        if (_hasPendingResult) ...[
+          const SizedBox(height: 12),
+          _recommendationCard(),
         ],
         const SizedBox(height: 12),
         _inputInfoCard(),
-        const SizedBox(height: 16),
-        _calcButton(_calcButtonText(), onPressed: _runCurrentCalculation),
       ],
+    );
+  }
+
+  double? _pendingResultValue() {
+    if (_isAverageMode) return _avgResult;
+    if (_isMixedMode) return _mixResult;
+    if (_isTargetMode) return _targetResultOctane;
+    return null;
+  }
+
+  double _currentModeTotalLiter() {
+    if (_isAverageMode) {
+      return _parseDouble(highFuelCtrl) + _parseDouble(regFuelCtrl);
+    }
+    if (_isMixedMode) {
+      return _mixedTotalLiter();
+    }
+    return _parseDouble(targetCurrentLiterCtrl);
+  }
+
+  String _recommendationText() {
+    if (_isTargetMode) {
+      if (_targetImpossible) {
+        return '목표보다 높은 옥탄가의 연료를 선택해야 도달할 수 있습니다.';
+      }
+      if (_targetRequiredLiter != null) {
+        final fuelOctane = _parseDouble(targetFuelOctaneCtrl);
+        if (_targetRequiredLiter! <= 0) {
+          return '현재 연료가 이미 목표 옥탄가를 충족합니다.';
+        }
+        return '${fuelOctane.toStringAsFixed(1)} 옥탄 연료를 ${_targetRequiredLiter!.toStringAsFixed(1)}L 이상 넣으면 목표에 도달합니다.';
+      }
+    }
+
+    final result = _pendingResultValue();
+    if (result == null) {
+      return '값을 입력하고 계산하면 차량 기준에 맞춘 추천을 보여줍니다.';
+    }
+
+    final car = _mainCar();
+    if (car == null) {
+      return '차량 기준을 저장하면 권장/경고 기준에 맞춘 추천을 받을 수 있습니다.';
+    }
+
+    if (result >= car.recommendedOctane) {
+      return '권장 기준을 충족합니다. 현재 주유 조합을 기록해두면 다음 주유 때 비교하기 쉽습니다.';
+    }
+
+    final totalLiter = _currentModeTotalLiter();
+    const refillOctane = 98.0;
+    if (totalLiter > 0 && refillOctane > car.recommendedOctane) {
+      final requiredLiter =
+          ((car.recommendedOctane - result) * totalLiter) /
+              (refillOctane - car.recommendedOctane);
+      if (requiredLiter.isFinite && requiredLiter > 0) {
+        return '98 옥탄 고급유를 약 ${requiredLiter.toStringAsFixed(1)}L 보강하면 권장 ${car.recommendedOctane.toStringAsFixed(1)}에 가까워집니다.';
+      }
+    }
+
+    if (result >= car.warningOctane) {
+      return '일상 주행은 가능하지만 권장 기준까지 여유가 적습니다. 다음 주유에서 고급유 비중을 늘려보세요.';
+    }
+
+    return '경고 기준보다 낮습니다. 고부하 주행은 피하고 고급유로 옥탄가를 보강하는 편이 좋습니다.';
+  }
+
+  Widget _recommendationCard() {
+    final result = _pendingResultValue();
+    final status = result == null ? null : _status(result);
+    final color = status?.color ?? const Color(0xFF8B3A3A);
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 3,
+      shadowColor: Colors.black.withOpacity(0.06),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.local_gas_station_rounded, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '추천 전략',
+                    style: TextStyle(
+                      color: Color(0xFF151823),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _recommendationText(),
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '단가와 총액을 함께 남기면 비용 비교 기능으로 확장할 수 있습니다.',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -844,7 +984,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           Text(
             diff == null
                 ? status.message
-                : '${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(2)} (이전 대비)',
+                : '${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(2)} (이전 기록 대비)',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: diffColor,
@@ -1003,41 +1143,54 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       elevation: 3,
       shadowColor: Colors.black.withOpacity(0.06),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '입력 정보',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: ValueKey('input_${_shouldExpandInput}_${_calcMode}'),
+          initiallyExpanded: _shouldExpandInput,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: const Icon(Icons.tune_rounded),
+          title: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '입력 정보',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                InkWell(
-                  onTap: _showInputHelp,
-                  borderRadius: BorderRadius.circular(999),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.help_outline_rounded,
-                      color: Colors.grey.shade700,
-                      size: 20,
-                    ),
+              ),
+              InkWell(
+                onTap: _showInputHelp,
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.help_outline_rounded,
+                    color: Colors.grey.shade700,
+                    size: 20,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          subtitle: Text(
+            _shouldExpandInput ? '계산 방식을 선택하고 값을 입력' : '값을 수정하려면 펼쳐서 다시 계산',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 14),
-            ..._calculationFields(),
-            const SizedBox(height: 16),
+          ),
+          children: [
             _modeSelector(),
             const SizedBox(height: 14),
+            ..._calculationFields(),
+            const SizedBox(height: 14),
             _optionalRecordCard(),
+            const SizedBox(height: 16),
+            _calcButton(_calcButtonText(), onPressed: _runCurrentCalculation),
           ],
         ),
       ),
@@ -1045,9 +1198,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   String _inputHelpTitle() {
-    if (_isAverageMode) return '단순 계산 사용법';
-    if (_isMixedMode) return '탱크 계산 사용법';
-    return '목표 계산 사용법';
+    if (_isAverageMode) return '단순 혼합 사용법';
+    if (_isMixedMode) return '탱크 기준 사용법';
+    return '목표 맞추기 사용법';
   }
 
   String _inputHelpMessage() {
@@ -1089,9 +1242,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       ),
       child: Row(
         children: [
-          _modeButton('단순', 0),
-          _modeButton('탱크', 1),
-          _modeButton('목표', 2),
+          _modeButton('단순 혼합', 0),
+          _modeButton('탱크 기준', 1),
+          _modeButton('목표 맞추기', 2),
         ],
       ),
     );
@@ -1159,6 +1312,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               text,
               style: TextStyle(
                 color: selected ? Colors.white : Colors.black87,
+                fontSize: 13,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -1260,6 +1414,99 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
+  double? _diffFromLatestRecord(double value) {
+    final box = Hive.box<OctaneLog>('octane_logs');
+    if (box.isEmpty) return null;
+    return value - box.values.last.result;
+  }
+
+  Widget _changePill(double value) {
+    final diff = _diffFromLatestRecord(value);
+    if (diff == null) {
+      return _mutedPill('첫 기록 후보', Icons.fiber_new_rounded);
+    }
+
+    final isUp = diff >= 0;
+    final color = isUp ? const Color(0xFF2C83C8) : const Color(0xFFC3363B);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+            color: color,
+            size: 16,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            '${isUp ? '+' : '-'}${diff.abs().toStringAsFixed(2)} (최근 기록 대비)',
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mutedPill(String text, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0EEEE),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.grey.shade700, size: 16),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusBadge(String label, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.28), width: 1.2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 17),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _targetResultPanel() {
     final color = _targetImpossible ? Colors.red : const Color(0xFF2E7D32);
     final icon = _targetImpossible
@@ -1269,49 +1516,44 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     final value = _targetRequiredLiter == null
         ? '--'
         : '${_targetRequiredLiter!.toStringAsFixed(1)}L';
+    final resultOctane = _targetResultOctane;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.16),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: color.withOpacity(0.34), width: 1.5),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 16, color: color),
-                    const SizedBox(width: 7),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
-                ),
+            Row(
+              children: [
+                _statusBadge(label, icon, color),
+                const Spacer(),
+                if (resultOctane != null) _changePill(resultOctane),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              '필요 주유량',
+              style: TextStyle(
+                color: Color(0xFF5F504C),
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             Text(
               value,
               style: const TextStyle(
-                fontSize: 46,
+                fontSize: 58,
                 fontWeight: FontWeight.w900,
                 letterSpacing: -0.8,
                 color: Colors.black87,
               ),
             ),
+            if (!_targetImpossible && _targetRequiredLiter != null) ...[
+              const SizedBox(height: 8),
+              _mutedPill('아직 기록에 저장되지 않았습니다.', Icons.edit_note_rounded),
+            ],
             const SizedBox(height: 12),
             Divider(height: 1, color: Colors.grey.shade300),
             const SizedBox(height: 14),
@@ -1335,20 +1577,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             ),
             if (!_targetImpossible && _targetRequiredLiter != null) ...[
               const SizedBox(height: 16),
-              OutlinedButton.icon(
+              ElevatedButton.icon(
                 onPressed: _saveTargetLog,
                 icon: const Icon(Icons.save_rounded),
                 label: const Text('기록 저장'),
-                style: OutlinedButton.styleFrom(
+                style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
-                  foregroundColor: const Color(0xFF312827),
-                  side: const BorderSide(color: Color(0xFFE0D8D4)),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
@@ -1371,15 +1607,27 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       curve: Curves.easeOutCubic,
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _statusChip(st),
+              Row(
+                children: [
+                  _statusBadge(st.label, st.icon, st.color),
+                  const Spacer(),
+                  _changePill(value),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
+              const Text(
+                '계산 결과',
+                style: TextStyle(
+                  color: Color(0xFF5F504C),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: value - 0.45, end: value),
                 duration: const Duration(milliseconds: 420),
@@ -1388,7 +1636,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   return Text(
                     animatedValue.toStringAsFixed(2),
                     style: const TextStyle(
-                      fontSize: 46,
+                      fontSize: 60,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -0.8,
                       color: Colors.black87,
@@ -1396,6 +1644,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   );
                 },
               ),
+              if (onSave != null && value > 0) ...[
+                const SizedBox(height: 8),
+                _mutedPill('아직 기록에 저장되지 않았습니다.', Icons.edit_note_rounded),
+              ],
               const SizedBox(height: 12),
               Divider(height: 1, color: Colors.grey.shade300),
               const SizedBox(height: 14),
@@ -1420,20 +1672,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               ),
               if (onSave != null && value > 0) ...[
                 const SizedBox(height: 16),
-                OutlinedButton.icon(
+                ElevatedButton.icon(
                   onPressed: onSave,
                   icon: const Icon(Icons.save_rounded),
                   label: const Text('기록 저장'),
-                  style: OutlinedButton.styleFrom(
+                  style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
-                    foregroundColor: const Color(0xFF312827),
-                    side: const BorderSide(color: Color(0xFFE0D8D4)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
@@ -1678,7 +1924,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                '최근 옥탄가',
+                '기록 추세',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
@@ -1707,15 +1953,28 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                           : const Color(0xFFC3363B),
                     ),
                     const SizedBox(width: 3),
-                    Text(
-                      '${diff >= 0 ? '+' : '-'}${diff.abs().toStringAsFixed(2)}',
-                      style: TextStyle(
-                        color: diff >= 0
-                            ? const Color(0xFF2C83C8)
-                            : const Color(0xFFC3363B),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${diff >= 0 ? '+' : '-'}${diff.abs().toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: diff >= 0
+                                ? const Color(0xFF2C83C8)
+                                : const Color(0xFFC3363B),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          '최근 변화',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1751,7 +2010,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           _softStatusChip(status),
           const SizedBox(height: 12),
           Text(
-            _touchedValue != null ? '선택 값  $selectedLabel' : '최신값 기준',
+            _touchedValue != null ? '선택한 기록  $selectedLabel' : '현재 위치: 최신 기록',
             style: TextStyle(
               fontSize: 13,
               color: Colors.grey.shade600,
@@ -2416,16 +2675,36 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           children: [
             _sectionTitle('설정'),
             const SizedBox(height: 12),
+            _settingsGroupLabel('차량 관리'),
+            const SizedBox(height: 8),
             _vehicleSettingsCard(box, car),
             const SizedBox(height: 16),
+            _settingsGroupLabel('도움말'),
+            const SizedBox(height: 8),
             _usageGuideCard(),
             const SizedBox(height: 16),
+            _settingsGroupLabel('지원 및 정보'),
+            const SizedBox(height: 8),
             _contactCard(),
             const SizedBox(height: 16),
             _updateHistoryCard(),
           ],
         );
       },
+    );
+  }
+
+  Widget _settingsGroupLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 13,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
     );
   }
 
@@ -2636,7 +2915,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             _usageStep(
               icon: Icons.calculate_outlined,
               title: '계산하기',
-              message: '단순, 탱크, 목표 중 상황에 맞는 방식을 선택하고 값을 입력합니다.',
+              message: '단순 혼합, 탱크 기준, 목표 맞추기 중 상황에 맞는 방식을 선택하고 값을 입력합니다.',
             ),
             const SizedBox(height: 10),
             _usageStep(
@@ -2785,10 +3064,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             _ReleaseNote(
               version: 'v1.0.2',
               items: [
+                '계산 결과와 추천 전략을 화면 상단에 배치',
                 '계산 결과가 자동으로 기록되지 않도록 변경',
+                '저장 전 상태와 최근 기록 대비 변화량 표시',
                 '첫 실행 시 차량 설정 가이드 추가',
-                '차량 기준이 없을 때 기본 옥탄가 표시 제거',
-                '기록 그래프 날짜 표시 개선',
+                '설정, 문의, 사용 방법 메뉴 정리',
               ],
             ),
             SizedBox(height: 12),
