@@ -4,10 +4,15 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'model/car_profile.dart';
 import 'model/octane_log.dart';
 
-class HistoryDetailPage extends StatelessWidget {
+class HistoryDetailPage extends StatefulWidget {
   final OctaneLog log;
+  final dynamic logKey;
 
-  const HistoryDetailPage({super.key, required this.log});
+  const HistoryDetailPage({
+    super.key,
+    required this.log,
+    required this.logKey,
+  });
 
   static const Map<String, String> inputLabelMap = {
     'highLiter': '고급유 주유량 (L)',
@@ -27,12 +32,33 @@ class HistoryDetailPage extends StatelessWidget {
   };
 
   @override
+  State<HistoryDetailPage> createState() => _HistoryDetailPageState();
+}
+
+class _HistoryDetailPageState extends State<HistoryDetailPage> {
+  late OctaneLog _log;
+
+  @override
+  void initState() {
+    super.initState();
+    _log = widget.log;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final status = _status(log.result);
+    final status = _status(_log.result);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('기록 상세'),
+        actions: [
+          IconButton(
+            tooltip: '기록 수정',
+            onPressed: _showEditSheet,
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -40,29 +66,29 @@ class HistoryDetailPage extends StatelessWidget {
           _infoCard(
             title: '계산 정보',
             children: [
-              _row('계산 방식', _typeTitle(log.type)),
+              _row('계산 방식', _typeTitle(_log.type)),
               _row(
                 '계산 시각',
-                '${log.time.year}.${log.time.month.toString().padLeft(2, '0')}.${log.time.day.toString().padLeft(2, '0')} '
-                '${log.time.hour.toString().padLeft(2, '0')}:${log.time.minute.toString().padLeft(2, '0')}',
+                '${_log.time.year}.${_log.time.month.toString().padLeft(2, '0')}.${_log.time.day.toString().padLeft(2, '0')} '
+                '${_log.time.hour.toString().padLeft(2, '0')}:${_log.time.minute.toString().padLeft(2, '0')}',
               ),
             ],
           ),
           const SizedBox(height: 12),
           _infoCard(
             title: '입력값',
-            children: log.inputs.entries.map((entry) {
-              final label = inputLabelMap[entry.key] ?? entry.key;
+            children: _log.inputs.entries.map((entry) {
+              final label = HistoryDetailPage.inputLabelMap[entry.key] ?? entry.key;
               return _row(label, entry.value.toString());
             }).toList(),
           ),
-          if (log.memo.trim().isNotEmpty) ...[
+          if (_log.memo.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
             _infoCard(
               title: '메모',
               children: [
                 Text(
-                  log.memo,
+                  _log.memo,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -79,7 +105,7 @@ class HistoryDetailPage extends StatelessWidget {
               child: Column(
                 children: [
                   Text(
-                    log.result.toStringAsFixed(2),
+                    _log.result.toStringAsFixed(2),
                     style: const TextStyle(
                       fontSize: 42,
                       fontWeight: FontWeight.w900,
@@ -113,6 +139,227 @@ class HistoryDetailPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showEditSheet() async {
+    final inputKeys = _editableInputKeys(_log.type);
+    final controllers = {
+      for (final key in inputKeys)
+        key: TextEditingController(text: _log.inputs[key]?.toString() ?? ''),
+    };
+    final memoController = TextEditingController(text: _log.memo);
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 18,
+            top: 4,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Text(
+                '${_typeTitle(_log.type)} 수정',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 12),
+              ...inputKeys.map((key) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    controller: controllers[key],
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: HistoryDetailPage.inputLabelMap[key] ?? key,
+                    ),
+                  ),
+                );
+              }),
+              TextField(
+                controller: memoController,
+                minLines: 2,
+                maxLines: 4,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  labelText: '메모',
+                  hintText: '기록 메모',
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  final updatedInputs = Map<String, dynamic>.from(_log.inputs);
+                  for (final key in inputKeys) {
+                    final text = controllers[key]!.text.trim();
+                    if (text.isEmpty &&
+                        (key == 'tankCapacity' ||
+                            key == 'unitPrice' ||
+                            key == 'totalCost')) {
+                      updatedInputs.remove(key);
+                    } else {
+                      updatedInputs[key] = text;
+                    }
+                  }
+
+                  final updated = _buildUpdatedLog(
+                    inputs: updatedInputs,
+                    memo: memoController.text.trim(),
+                  );
+                  if (updated == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('입력값을 확인해 주세요.')),
+                    );
+                    return;
+                  }
+
+                  Hive.box<OctaneLog>('octane_logs').put(widget.logKey, updated);
+                  setState(() {
+                    _log = updated;
+                  });
+                  Navigator.pop(context, true);
+                },
+                icon: const Icon(Icons.save_rounded),
+                label: const Text('수정 저장'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    for (final controller in controllers.values) {
+      controller.dispose();
+    }
+    memoController.dispose();
+
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('기록을 수정했습니다.')),
+      );
+    }
+  }
+
+  List<String> _editableInputKeys(String type) {
+    final keys = switch (type) {
+      'average' => ['highLiter', 'regularLiter'],
+      'mixed' => [
+          'beforeLiter',
+          'beforeOctane',
+          'addLiter',
+          'addOctane',
+          'tankCapacity',
+        ],
+      'target' => [
+          'targetOctane',
+          'currentLiter',
+          'currentOctane',
+          'fuelOctane',
+        ],
+      _ => <String>[],
+    };
+
+    return [
+      ...keys,
+      'unitPrice',
+      'totalCost',
+    ];
+  }
+
+  OctaneLog? _buildUpdatedLog({
+    required Map<String, dynamic> inputs,
+    required String memo,
+  }) {
+    final result = _recalculateResult(_log.type, inputs);
+    if (result == null || result <= 0 || result.isNaN || result.isInfinite) {
+      return null;
+    }
+
+    final normalizedInputs = Map<String, dynamic>.from(inputs);
+    if (_log.type == 'target') {
+      final requiredLiter = _targetRequiredLiter(normalizedInputs);
+      if (requiredLiter == null || requiredLiter.isInfinite) {
+        return null;
+      }
+      normalizedInputs['requiredLiter'] = requiredLiter.toStringAsFixed(1);
+    }
+
+    return OctaneLog(
+      time: _log.time,
+      type: _log.type,
+      result: result,
+      inputs: normalizedInputs,
+      memo: memo,
+    );
+  }
+
+  double? _recalculateResult(String type, Map<String, dynamic> inputs) {
+    final value = (String key) => double.tryParse(inputs[key]?.toString().trim() ?? '');
+
+    if (type == 'average') {
+      final high = value('highLiter');
+      final regular = value('regularLiter');
+      if (high == null || regular == null) return null;
+      final total = high + regular;
+      if (total <= 0) return null;
+      return ((high * 97) + (regular * 92)) / total;
+    }
+
+    if (type == 'mixed') {
+      final beforeLiter = value('beforeLiter');
+      final beforeOctane = value('beforeOctane');
+      final addLiter = value('addLiter');
+      final addOctane = value('addOctane');
+      if (beforeLiter == null ||
+          beforeOctane == null ||
+          addLiter == null ||
+          addOctane == null) {
+        return null;
+      }
+      final total = beforeLiter + addLiter;
+      if (total <= 0) return null;
+      return ((beforeLiter * beforeOctane) + (addLiter * addOctane)) / total;
+    }
+
+    if (type == 'target') {
+      final target = value('targetOctane');
+      final currentOctane = value('currentOctane');
+      final requiredLiter = _targetRequiredLiter(inputs);
+      if (target == null || currentOctane == null || requiredLiter == null) {
+        return null;
+      }
+      if (requiredLiter.isInfinite) return null;
+      return currentOctane >= target ? currentOctane : target;
+    }
+
+    return null;
+  }
+
+  double? _targetRequiredLiter(Map<String, dynamic> inputs) {
+    final target = double.tryParse(inputs['targetOctane']?.toString().trim() ?? '');
+    final currentLiter = double.tryParse(inputs['currentLiter']?.toString().trim() ?? '');
+    final currentOctane = double.tryParse(inputs['currentOctane']?.toString().trim() ?? '');
+    final fuelOctane = double.tryParse(inputs['fuelOctane']?.toString().trim() ?? '');
+
+    if (target == null ||
+        currentLiter == null ||
+        currentOctane == null ||
+        fuelOctane == null ||
+        target <= 0 ||
+        currentLiter <= 0 ||
+        currentOctane <= 0 ||
+        fuelOctane <= 0) {
+      return null;
+    }
+
+    if (currentOctane >= target) return 0;
+    if (fuelOctane <= target) return double.infinity;
+    return ((target - currentOctane) * currentLiter) / (fuelOctane - target);
   }
 
   Widget _infoCard({
@@ -157,9 +404,9 @@ class HistoryDetailPage extends StatelessWidget {
   String _typeTitle(String type) {
     switch (type) {
       case 'average':
-        return '단순 계산';
+        return '단순 혼합';
       case 'mixed':
-        return '탱크 혼합 계산';
+        return '탱크 기준';
       case 'target':
         return '목표 맞추기';
       default:
@@ -169,8 +416,16 @@ class HistoryDetailPage extends StatelessWidget {
 
   _DetailStatus _status(double value) {
     final car = Hive.box<CarProfile>('car_profile').get('main');
-    final recommend = car?.recommendedOctane ?? 95;
-    final warning = car?.warningOctane ?? 91;
+    if (car == null) {
+      return const _DetailStatus(
+        '차량 기준 미설정',
+        '차량 정보를 저장하면 권장/경고 기준으로 결과를 판단합니다.',
+        Colors.blueGrey,
+      );
+    }
+
+    final recommend = car.recommendedOctane;
+    final warning = car.warningOctane;
 
     if (value >= recommend) {
       return const _DetailStatus(

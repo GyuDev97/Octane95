@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'history_detail_page.dart';
@@ -22,8 +25,35 @@ Future<void> main() async {
   }
 
   await Hive.openBox<CarProfile>('car_profile');
+  await AnalyticsService.init();
+  await AnalyticsService.logAppOpen();
 
   runApp(const OctaneApp());
+}
+
+class AnalyticsService {
+  static FirebaseAnalytics? _analytics;
+
+  static Future<void> init() async {
+    try {
+      await Firebase.initializeApp();
+      _analytics = FirebaseAnalytics.instance;
+    } catch (_) {
+      _analytics = null;
+    }
+  }
+
+  static Future<void> logAppOpen() async {
+    try {
+      await _analytics?.logAppOpen();
+    } catch (_) {}
+  }
+
+  static Future<void> log(String name, {Map<String, Object>? parameters}) async {
+    try {
+      await _analytics?.logEvent(name: name, parameters: parameters);
+    } catch (_) {}
+  }
 }
 
 class OctaneApp extends StatelessWidget {
@@ -193,6 +223,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_syncMainTab);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showOnboardingIfNeeded();
+    });
   }
 
   void _syncMainTab() {
@@ -200,6 +233,132 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     setState(() {
       _currentMainTab = _tabController.index;
     });
+    _logMainTabOpen(_currentMainTab);
+  }
+
+  void _logMainTabOpen(int index) {
+    if (index == 1) {
+      AnalyticsService.log('open_history');
+    } else if (index == 2) {
+      AnalyticsService.log('open_settings');
+    }
+  }
+
+  Future<void> _showOnboardingIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyShown = prefs.getBool('onboarding_shown_v1') ?? false;
+    if (alreadyShown || !mounted) return;
+
+    var pageIndex = 0;
+    final controller = PageController();
+
+    Future<void> finish() async {
+      await prefs.setBool('onboarding_shown_v1', true);
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: PageView(
+                          controller: controller,
+                          onPageChanged: (index) {
+                            setDialogState(() {
+                              pageIndex = index;
+                            });
+                          },
+                          children: const [
+                            _OnboardingPage(
+                              icon: Icons.calculate_outlined,
+                              title: '고급유와 일반유 혼합 옥탄 계산',
+                              message:
+                                  '주유량을 입력하면 섞인 뒤의 평균 옥탄가를 바로 확인할 수 있습니다.',
+                            ),
+                            _OnboardingPage(
+                              icon: Icons.directions_car_outlined,
+                              title: '차량 기준 설정',
+                              message:
+                                  '권장 옥탄가와 경고 기준을 저장하면 계산 결과를 내 차량 기준으로 판단합니다.',
+                            ),
+                            _OnboardingPage(
+                              icon: Icons.bar_chart_outlined,
+                              title: '기록 저장 및 통계 관리',
+                              message:
+                                  '계산 결과는 기록 저장 버튼을 눌렀을 때만 통계와 그래프에 반영됩니다.',
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(3, (index) {
+                          final selected = index == pageIndex;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: selected ? 20 : 7,
+                            height: 7,
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? const Color(0xFF8B3A3A)
+                                  : const Color(0xFFE2D9D5),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: finish,
+                            child: const Text('건너뛰기'),
+                          ),
+                          const Spacer(),
+                          FilledButton(
+                            onPressed: () {
+                              if (pageIndex < 2) {
+                                controller.nextPage(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                );
+                              } else {
+                                finish();
+                              }
+                            },
+                            child: Text(pageIndex < 2 ? '다음' : '시작하기'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
   }
   Future<void> _confirmDeleteLog(int indexFromTop) async {
     final confirmed =
@@ -363,6 +522,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         memo: memo,
       ),
     );
+    AnalyticsService.log('save_record', parameters: {'type': type});
   }
 
   _Status _status(double v) {
@@ -520,7 +680,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   void _showSavedSnackBar() {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('기록을 저장했습니다.')));
+    ).showSnackBar(const SnackBar(content: Text('✅ 기록이 저장되었습니다.')));
   }
 
   void _onCalcAverage() {
@@ -529,6 +689,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       _avgResult = value;
       _avgComment = _statusSentence(value);
     });
+    AnalyticsService.log('calculate_simple');
   }
 
   void _onCalcMixed() {
@@ -537,6 +698,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       _mixResult = value;
       _mixComment = _statusSentence(value);
     });
+    AnalyticsService.log('calculate_tank');
   }
 
   Map<String, dynamic> _recordInputs() {
@@ -560,6 +722,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         _targetImpossible = true;
         _targetComment = '목표 옥탄가, 현재 잔량, 현재 옥탄가, 추가 연료 옥탄가를 입력해 주세요.';
       });
+      AnalyticsService.log('calculate_target');
       return;
     }
 
@@ -579,6 +742,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             '${fuelOctane.toStringAsFixed(1)} 옥탄 연료를 ${requiredLiter.toStringAsFixed(1)}L 이상 넣으면 목표 ${target.toStringAsFixed(1)}에 도달합니다.';
       }
     });
+    AnalyticsService.log('calculate_target');
   }
 
   void _saveCarProfile({
@@ -634,6 +798,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           setState(() {
             _currentMainTab = index;
           });
+          _logMainTabOpen(index);
           _tabController.animateTo(index);
         },
         destinations: const [
@@ -1185,6 +1350,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
           children: [
             _modeSelector(),
+            const SizedBox(height: 10),
+            _modeDescriptionCard(),
             const SizedBox(height: 14),
             ..._calculationFields(),
             const SizedBox(height: 14),
@@ -1248,6 +1415,48 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         ],
       ),
     );
+  }
+
+  Widget _modeDescriptionCard() {
+    final icon = switch (_calcMode) {
+      0 => Icons.blender_outlined,
+      1 => Icons.local_gas_station_outlined,
+      _ => Icons.flag_outlined,
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF9F8),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE7DFDB)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: const Color(0xFF8B3A3A), size: 20),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              _modeDescription(),
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _modeDescription() {
+    if (_isAverageMode) return '고급유와 일반유를 함께 넣었을 때 평균 옥탄가를 계산합니다.';
+    if (_isMixedMode) return '현재 탱크에 남은 연료 상태를 반영해 최종 옥탄가를 계산합니다.';
+    return '목표 옥탄가를 맞추기 위해 필요한 주유량을 계산합니다.';
   }
 
   List<Widget> _calculationFields() {
@@ -1481,6 +1690,40 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
+  Widget _unsavedNotice() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6E5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE8C98D)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFF9A6500),
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '⚠ 아직 기록에 저장되지 않았습니다.\n기록 저장 버튼을 눌러야 통계 및 그래프에 반영됩니다.',
+              style: TextStyle(
+                color: Colors.grey.shade800,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _statusBadge(String label, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1552,7 +1795,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             ),
             if (!_targetImpossible && _targetRequiredLiter != null) ...[
               const SizedBox(height: 8),
-              _mutedPill('아직 기록에 저장되지 않았습니다.', Icons.edit_note_rounded),
+              _unsavedNotice(),
             ],
             const SizedBox(height: 12),
             Divider(height: 1, color: Colors.grey.shade300),
@@ -1646,7 +1889,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               ),
               if (onSave != null && value > 0) ...[
                 const SizedBox(height: 8),
-                _mutedPill('아직 기록에 저장되지 않았습니다.', Icons.edit_note_rounded),
+                _unsavedNotice(),
               ],
               const SizedBox(height: 12),
               Divider(height: 1, color: Colors.grey.shade300),
@@ -2392,9 +2635,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           borderRadius: BorderRadius.circular(8),
           onLongPress: () => _confirmDeleteLog(indexFromTop),
           onTap: () {
+            final box = Hive.box<OctaneLog>('octane_logs');
+            final logKey = box.keyAt(box.length - 1 - indexFromTop);
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => HistoryDetailPage(log: log)),
+              MaterialPageRoute(
+                builder: (_) => HistoryDetailPage(log: log, logKey: logKey),
+              ),
             );
           },
           child: Padding(
@@ -2516,10 +2763,12 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         borderRadius: BorderRadius.circular(24),
         onLongPress: () => _confirmDeleteLog(indexFromTop),
         onTap: () {
+          final box = Hive.box<OctaneLog>('octane_logs');
+          final logKey = box.keyAt(box.length - 1 - indexFromTop);
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => HistoryDetailPage(log: log),
+              builder: (_) => HistoryDetailPage(log: log, logKey: logKey),
             ),
           );
         },
@@ -2583,9 +2832,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   String _typeTitle(String type) {
     switch (type) {
       case 'average':
-        return '단순 계산';
+        return '단순 혼합';
       case 'mixed':
-        return '탱크 혼합 계산';
+        return '탱크 기준';
       case 'target':
         return '목표 맞추기';
       default:
@@ -2675,7 +2924,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           children: [
             _sectionTitle('설정'),
             const SizedBox(height: 12),
-            _settingsGroupLabel('차량 관리'),
+            _settingsGroupLabel('차량'),
             const SizedBox(height: 8),
             _vehicleSettingsCard(box, car),
             const SizedBox(height: 16),
@@ -2683,10 +2932,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             const SizedBox(height: 8),
             _usageGuideCard(),
             const SizedBox(height: 16),
-            _settingsGroupLabel('지원 및 정보'),
-            const SizedBox(height: 8),
             _contactCard(),
             const SizedBox(height: 16),
+            _settingsGroupLabel('정보'),
+            const SizedBox(height: 8),
             _updateHistoryCard(),
           ],
         );
@@ -2857,6 +3106,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   Future<void> _openContactEmail() async {
+    AnalyticsService.log('send_email_inquiry');
     final uri = Uri(
       scheme: 'mailto',
       path: 'bgpoilkj@naver.com',
@@ -3086,6 +3336,62 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 }
 
+
+
+
+class _OnboardingPage extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+
+  const _OnboardingPage({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final brand = Theme.of(context).colorScheme.primary;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 74,
+          height: 74,
+          decoration: BoxDecoration(
+            color: brand.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Icon(icon, color: brand, size: 38),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFF151823),
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            height: 1.25,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            height: 1.45,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 
 
