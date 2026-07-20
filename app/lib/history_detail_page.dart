@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'model/car_profile.dart';
@@ -8,11 +8,7 @@ class HistoryDetailPage extends StatefulWidget {
   final OctaneLog log;
   final dynamic logKey;
 
-  const HistoryDetailPage({
-    super.key,
-    required this.log,
-    required this.logKey,
-  });
+  const HistoryDetailPage({super.key, required this.log, required this.logKey});
 
   static const Map<String, String> inputLabelMap = {
     'highLiter': '고급유 주유량 (L)',
@@ -28,6 +24,10 @@ class HistoryDetailPage extends StatefulWidget {
     'fuelOctane': '넣을 연료 옥탄가',
     'requiredLiter': '필요 주유량 (L)',
     'unitPrice': '리터당 단가 (원)',
+    'highUnitPrice': '고급유 리터당 단가 (원)',
+    'highTotalCost': '고급유 총액 (원)',
+    'regularUnitPrice': '일반유 리터당 단가 (원)',
+    'regularTotalCost': '일반유 총액 (원)',
     'totalCost': '총 주유 금액 (원)',
   };
 
@@ -70,17 +70,19 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
               _row(
                 '계산 시각',
                 '${_log.time.year}.${_log.time.month.toString().padLeft(2, '0')}.${_log.time.day.toString().padLeft(2, '0')} '
-                '${_log.time.hour.toString().padLeft(2, '0')}:${_log.time.minute.toString().padLeft(2, '0')}',
+                    '${_log.time.hour.toString().padLeft(2, '0')}:${_log.time.minute.toString().padLeft(2, '0')}',
               ),
             ],
           ),
           const SizedBox(height: 12),
           _infoCard(
             title: '입력값',
-            children: _log.inputs.entries.map((entry) {
-              final label = HistoryDetailPage.inputLabelMap[entry.key] ?? entry.key;
-              return _row(label, entry.value.toString());
-            }).toList(),
+            children:
+                _log.inputs.entries.map((entry) {
+                  final label =
+                      HistoryDetailPage.inputLabelMap[entry.key] ?? entry.key;
+                  return _row(label, entry.value.toString());
+                }).toList(),
           ),
           if (_log.memo.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -113,7 +115,10 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                   ),
                   const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: status.color.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(999),
@@ -166,7 +171,10 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
             children: [
               Text(
                 '${_typeTitle(_log.type)} 수정',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 12),
               ...inputKeys.map((key) {
@@ -174,7 +182,9 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: TextField(
                     controller: controllers[key],
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       labelText: HistoryDetailPage.inputLabelMap[key] ?? key,
                     ),
@@ -218,7 +228,9 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
                     return;
                   }
 
-                  Hive.box<OctaneLog>('octane_logs').put(widget.logKey, updated);
+                  Hive.box<OctaneLog>(
+                    'octane_logs',
+                  ).put(widget.logKey, updated);
                   setState(() {
                     _log = updated;
                   });
@@ -239,36 +251,39 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     memoController.dispose();
 
     if (saved == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('기록을 수정했습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('기록을 수정했습니다.')));
     }
   }
 
   List<String> _editableInputKeys(String type) {
     final keys = switch (type) {
-      'average' => ['highLiter', 'regularLiter'],
+      'average' => [
+        'highLiter',
+        'regularLiter',
+        'highUnitPrice',
+        'highTotalCost',
+        'regularUnitPrice',
+        'regularTotalCost',
+      ],
       'mixed' => [
-          'beforeLiter',
-          'beforeOctane',
-          'addLiter',
-          'addOctane',
-          'tankCapacity',
-        ],
+        'beforeLiter',
+        'beforeOctane',
+        'addLiter',
+        'addOctane',
+        'tankCapacity',
+      ],
       'target' => [
-          'targetOctane',
-          'currentLiter',
-          'currentOctane',
-          'fuelOctane',
-        ],
+        'targetOctane',
+        'currentLiter',
+        'currentOctane',
+        'fuelOctane',
+      ],
       _ => <String>[],
     };
 
-    return [
-      ...keys,
-      'unitPrice',
-      'totalCost',
-    ];
+    return [...keys, if (type != 'average') 'unitPrice', 'totalCost'];
   }
 
   OctaneLog? _buildUpdatedLog({
@@ -299,7 +314,8 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   }
 
   double? _recalculateResult(String type, Map<String, dynamic> inputs) {
-    final value = (String key) => double.tryParse(inputs[key]?.toString().trim() ?? '');
+    final value =
+        (String key) => double.tryParse(inputs[key]?.toString().trim() ?? '');
 
     if (type == 'average') {
       final high = value('highLiter');
@@ -341,10 +357,18 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
   }
 
   double? _targetRequiredLiter(Map<String, dynamic> inputs) {
-    final target = double.tryParse(inputs['targetOctane']?.toString().trim() ?? '');
-    final currentLiter = double.tryParse(inputs['currentLiter']?.toString().trim() ?? '');
-    final currentOctane = double.tryParse(inputs['currentOctane']?.toString().trim() ?? '');
-    final fuelOctane = double.tryParse(inputs['fuelOctane']?.toString().trim() ?? '');
+    final target = double.tryParse(
+      inputs['targetOctane']?.toString().trim() ?? '',
+    );
+    final currentLiter = double.tryParse(
+      inputs['currentLiter']?.toString().trim() ?? '',
+    );
+    final currentOctane = double.tryParse(
+      inputs['currentOctane']?.toString().trim() ?? '',
+    );
+    final fuelOctane = double.tryParse(
+      inputs['fuelOctane']?.toString().trim() ?? '',
+    );
 
     if (target == null ||
         currentLiter == null ||
@@ -362,10 +386,7 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
     return ((target - currentOctane) * currentLiter) / (fuelOctane - target);
   }
 
-  Widget _infoCard({
-    required String title,
-    required List<Widget> children,
-  }) {
+  Widget _infoCard({required String title, required List<Widget> children}) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -392,7 +413,10 @@ class _HistoryDetailPageState extends State<HistoryDetailPage> {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.grey,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),

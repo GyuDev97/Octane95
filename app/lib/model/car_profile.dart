@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:hive/hive.dart';
 
 part 'car_profile.g.dart';
@@ -19,11 +21,15 @@ class CarProfile extends HiveObject {
   @HiveField(4)
   final double? tankCapacity;
 
+  @HiveField(5)
+  final Uint8List? photoBytes;
+
   CarProfile({
     required this.name,
     required this.year,
     required this.recommendedOctane,
     required this.warningOctane,
-    this.tankCapacity, // 🔥 추가
+    this.tankCapacity,
+    this.photoBytes,
   });
 }

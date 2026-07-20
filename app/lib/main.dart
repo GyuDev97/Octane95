@@ -6,6 +6,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'history_detail_page.dart';
 import 'model/car_profile.dart';
@@ -62,19 +63,19 @@ class AnalyticsService {
 class OctaneApp extends StatelessWidget {
   const OctaneApp({super.key});
 
-  static const Color _brand = Color(0xFF8B3A3A);
-  static const Color _brandDark = Color(0xFF6E2C2C);
-  static const Color _bg = Color(0xFFF8F7F6);
-  static const Color _card = Colors.white;
+  static const Color _brand = Color(0xFF00E58A);
+  static const Color _brandDark = Color(0xFF00B96F);
+  static const Color _bg = Color(0xFF061421);
+  static const Color _card = Color(0xFF0D2033);
 
   @override
   Widget build(BuildContext context) {
     final base = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(
         seedColor: _brand,
-        brightness: Brightness.light,
+        brightness: Brightness.dark,
         primary: _brand,
         surface: _card,
       ),
@@ -91,22 +92,22 @@ class OctaneApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           titleTextStyle: TextStyle(
-            fontSize: 24,
+            fontSize: 19,
             fontWeight: FontWeight.w900,
-            color: Color(0xFF1F1717),
+            color: Colors.white,
           ),
         ),
-        dividerColor: const Color(0xFFE7DFDB),
+        dividerColor: const Color(0xFF1B3852),
         tabBarTheme: const TabBarThemeData(
           labelColor: _brand,
-          unselectedLabelColor: Color(0xFF231C1B),
+          unselectedLabelColor: Color(0xFF8296AA),
           indicatorColor: _brand,
           indicatorSize: TabBarIndicatorSize.label,
-          dividerColor: Color(0xFFE7DFDB),
-          labelStyle: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+          dividerColor: Color(0xFF1B3852),
+          labelStyle: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
           unselectedLabelStyle: TextStyle(
             fontWeight: FontWeight.w800,
-            fontSize: 17,
+            fontSize: 13,
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -125,17 +126,18 @@ class OctaneApp extends StatelessWidget {
           ),
         ),
         cardTheme: CardThemeData(
-          color: Colors.white,
-          elevation: 4,
-          shadowColor: Colors.black.withOpacity(0.08),
-          surfaceTintColor: Colors.white,
+          color: _card,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: Color(0xFF1B3852)),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: const Color(0xFFFCFBFB),
+          fillColor: const Color(0xFF091A2A),
           isDense: true,
           floatingLabelBehavior: FloatingLabelBehavior.auto,
           contentPadding: const EdgeInsets.symmetric(
@@ -143,26 +145,38 @@ class OctaneApp extends StatelessWidget {
             vertical: 22,
           ),
           hintStyle: const TextStyle(
-            color: Color(0xFFA0948E),
+            color: Color(0xFF637A91),
             fontWeight: FontWeight.w600,
           ),
           labelStyle: const TextStyle(
-            color: Color(0xFF5F504C),
+            color: Color(0xFFB7C7D8),
             fontSize: 17,
             fontWeight: FontWeight.w700,
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFFD9D0CC), width: 1.4),
+            borderSide: const BorderSide(color: Color(0xFF24435E), width: 1.2),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFFD9D0CC), width: 1.4),
+            borderSide: const BorderSide(color: Color(0xFF24435E), width: 1.2),
           ),
           focusedBorder: const OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(18)),
             borderSide: BorderSide(color: _brand, width: 1.8),
           ),
+        ),
+        bottomSheetTheme: const BottomSheetThemeData(
+          backgroundColor: _bg,
+          surfaceTintColor: Colors.transparent,
+          modalBackgroundColor: _bg,
+          modalBarrierColor: Color(0xB3000000),
+          dragHandleColor: Color(0xFF637A91),
+          showDragHandle: true,
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: _card,
+          surfaceTintColor: Colors.transparent,
         ),
       ),
       home: const OctaneHomePage(),
@@ -197,6 +211,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
 
   final TextEditingController priceCtrl = TextEditingController();
   final TextEditingController totalCostCtrl = TextEditingController();
+  final TextEditingController highPriceCtrl = TextEditingController();
+  final TextEditingController highTotalCostCtrl = TextEditingController();
+  final TextEditingController regularPriceCtrl = TextEditingController();
+  final TextEditingController regularTotalCostCtrl = TextEditingController();
   final TextEditingController memoCtrl = TextEditingController();
 
   final TextEditingController carNameCtrl = TextEditingController();
@@ -204,6 +222,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   final TextEditingController carRecCtrl = TextEditingController();
   final TextEditingController carWarnCtrl = TextEditingController();
   final TextEditingController carTankCtrl = TextEditingController();
+
+  Uint8List? _selectedCarPhoto;
 
   double? _avgResult;
   String? _avgComment;
@@ -433,6 +453,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     carRecCtrl.clear();
     carWarnCtrl.clear();
     carTankCtrl.clear();
+    setState(() => _selectedCarPhoto = null);
 
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -457,6 +478,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     targetFuelOctaneCtrl.dispose();
     priceCtrl.dispose();
     totalCostCtrl.dispose();
+    highPriceCtrl.dispose();
+    highTotalCostCtrl.dispose();
+    regularPriceCtrl.dispose();
+    regularTotalCostCtrl.dispose();
     memoCtrl.dispose();
     carNameCtrl.dispose();
     carYearCtrl.dispose();
@@ -716,6 +741,33 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   }
 
   Map<String, dynamic> _recordInputs() {
+    if (_isAverageMode) {
+      final highPrice = _parseDouble(highPriceCtrl);
+      final regularPrice = _parseDouble(regularPriceCtrl);
+      final enteredHighTotal = _parseDouble(highTotalCostCtrl);
+      final enteredRegularTotal = _parseDouble(regularTotalCostCtrl);
+      final highTotal =
+          enteredHighTotal > 0
+              ? enteredHighTotal
+              : highPrice * _parseDouble(highFuelCtrl);
+      final regularTotal =
+          enteredRegularTotal > 0
+              ? enteredRegularTotal
+              : regularPrice * _parseDouble(regFuelCtrl);
+      final combinedTotal = highTotal + regularTotal;
+
+      return {
+        if (highPriceCtrl.text.trim().isNotEmpty)
+          'highUnitPrice': highPriceCtrl.text.trim(),
+        if (highTotal > 0) 'highTotalCost': highTotal.toStringAsFixed(0),
+        if (regularPriceCtrl.text.trim().isNotEmpty)
+          'regularUnitPrice': regularPriceCtrl.text.trim(),
+        if (regularTotal > 0)
+          'regularTotalCost': regularTotal.toStringAsFixed(0),
+        if (combinedTotal > 0) 'totalCost': combinedTotal.toStringAsFixed(0),
+      };
+    }
+
     return {
       if (priceCtrl.text.trim().isNotEmpty) 'unitPrice': priceCtrl.text.trim(),
       if (totalCostCtrl.text.trim().isNotEmpty)
@@ -766,6 +818,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     required double recommend,
     required double warning,
     double? tank,
+    Uint8List? photoBytes,
   }) {
     final box = Hive.box<CarProfile>('car_profile');
 
@@ -776,62 +829,112 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         year: year,
         recommendedOctane: recommend,
         warningOctane: warning,
+        photoBytes: photoBytes,
         tankCapacity: tank, // ?뵦 異붽?
       ),
     );
   }
 
+  Future<Uint8List?> _pickCarPhoto() async {
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 82,
+        maxWidth: 1600,
+      );
+      if (image == null) return null;
+      final bytes = await image.readAsBytes();
+      if (!mounted) return null;
+      setState(() => _selectedCarPhoto = bytes);
+      return bytes;
+    } catch (_) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사진을 불러오지 못했습니다. 사진 접근 권한을 확인해 주세요.')),
+      );
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isHome = _currentMainTab == 0;
-    const dashboardBackground = Color(0xFF07111B);
+    const dashboardBackground = Color(0xFF061421);
 
     return Scaffold(
       backgroundColor: dashboardBackground,
-      appBar:
-          isHome
-              ? null
-              : AppBar(
-                backgroundColor: dashboardBackground,
-                foregroundColor: Colors.white,
-                titleTextStyle: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
-                iconTheme: const IconThemeData(color: Color(0xFF86D9C2)),
-                title: const Text('고급유노트'),
-                actions: [
-                  IconButton(
-                    tooltip: '설정',
-                    icon: const Icon(Icons.settings_outlined),
-                    onPressed: () => _tabController.animateTo(3),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                bottom: TabBar(
-                  controller: _tabController,
-                  labelColor: const Color(0xFF00D084),
-                  unselectedLabelColor: const Color(0xFF7F8D9C),
-                  indicatorColor: const Color(0xFF00D084),
-                  indicatorWeight: 4,
-                  tabs: const [
-                    Tab(text: '홈'),
-                    Tab(text: '기록'),
-                    Tab(text: '통계'),
-                    Tab(text: '차량'),
-                    Tab(text: '더보기'),
+      appBar: AppBar(
+        toolbarHeight: isHome ? 62 : 52,
+        backgroundColor: dashboardBackground,
+        foregroundColor: Colors.white,
+        titleSpacing: 16,
+        titleTextStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 19,
+          fontWeight: FontWeight.w900,
+        ),
+        iconTheme: const IconThemeData(color: Color(0xFF00E58A)),
+        title:
+            isHome
+                ? const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '고급유 노트',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '내 차의 주유 기록을 한눈에',
+                      style: TextStyle(
+                        color: Color(0xFF8296AA),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ],
-                ),
-              ),
+                )
+                : const Text('고급유 노트'),
+        actions: [
+          IconButton(
+            tooltip: '설정',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () {
+              setState(() => _currentMainTab = 3);
+              _tabController.animateTo(3);
+            },
+          ),
+          const SizedBox(width: 6),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: const Color(0xFF00E58A),
+          unselectedLabelColor: const Color(0xFF8296AA),
+          indicatorColor: const Color(0xFF00E58A),
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: const Color(0xFF1B3852),
+          tabs: const [
+            Tab(height: 40, text: '홈'),
+            Tab(height: 40, text: '기록'),
+            Tab(height: 40, text: '통계'),
+            Tab(height: 40, text: '차량'),
+            Tab(height: 40, text: '더보기'),
+          ],
+        ),
+      ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
               color:
-                  selected ? const Color(0xFF00D084) : const Color(0xFF7F8D9C),
-              fontSize: 12,
+                  selected ? const Color(0xFF00E58A) : const Color(0xFF8296AA),
+              fontSize: 10,
               fontWeight: FontWeight.w900,
             );
           }),
@@ -839,15 +942,15 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             final selected = states.contains(WidgetState.selected);
             return IconThemeData(
               color:
-                  selected ? const Color(0xFF00D084) : const Color(0xFF7F8D9C),
+                  selected ? const Color(0xFF00E58A) : const Color(0xFF8296AA),
             );
           }),
         ),
         child: NavigationBar(
           selectedIndex: _currentMainTab,
-          height: 72,
+          height: 64,
           backgroundColor: dashboardBackground,
-          indicatorColor: const Color(0xFF063D2E),
+          indicatorColor: const Color(0xFF073F35),
           surfaceTintColor: Colors.transparent,
           shadowColor: Colors.transparent,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -866,7 +969,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             ),
             NavigationDestination(
               icon: Icon(Icons.assignment_outlined),
-              selectedIcon: Icon(Icons.bar_chart_rounded),
+              selectedIcon: Icon(Icons.assignment_rounded),
               label: '기록',
             ),
             NavigationDestination(
@@ -877,7 +980,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             NavigationDestination(
               icon: Icon(Icons.directions_car_outlined),
               selectedIcon: Icon(Icons.directions_car_rounded),
-              label: '차량관리',
+              label: '차량',
             ),
             NavigationDestination(
               icon: Icon(Icons.more_horiz_outlined),
@@ -950,8 +1053,6 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 MediaQuery.of(context).padding.bottom + 18,
               ),
               children: [
-                _dashboardHeader(),
-                const SizedBox(height: 14),
                 _dashboardVehicleCard(car, latest),
                 const SizedBox(height: 14),
                 Row(
@@ -969,8 +1070,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                         icon: Icons.local_gas_station_rounded,
                         accent: const Color(0xFF00B874),
                         footer:
-                            latest == null || previous == null
+                            latest == null
                                 ? '첫 기록 대기'
+                                : previous == null
+                                ? '첫 기록 저장됨'
                                 : _signedDiff(latest.result - previous.result),
                       ),
                     ),
@@ -1005,7 +1108,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 ElevatedButton(
                   onPressed: _showRecordSheet,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00A866),
+                    backgroundColor: const Color(0xFF00B96F),
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(52),
                     shape: RoundedRectangleBorder(
@@ -1018,72 +1121,11 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   ),
                   child: const Text('주유 기록하기'),
                 ),
-                if (_hasPendingResult) ...[
-                  const SizedBox(height: 18),
-                  _darkSectionTitle('저장 대기 중인 계산'),
-                  const SizedBox(height: 10),
-                  if (_isAverageMode && _avgResult != null)
-                    _resultPanel(
-                      _avgResult!,
-                      _avgComment ?? '',
-                      onSave: _saveAverageLog,
-                    ),
-                  if (_isMixedMode && _mixResult != null)
-                    _resultPanel(
-                      _mixResult!,
-                      _mixComment ?? '',
-                      onSave: _saveMixedLog,
-                    ),
-                  if (_isTargetMode &&
-                      (_targetRequiredLiter != null || _targetComment != null))
-                    _targetResultPanel(),
-                ],
               ],
             );
           },
         );
       },
-    );
-  }
-
-  Widget _dashboardHeader() {
-    return Row(
-      children: [
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '고급유 노트',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 3),
-              Text(
-                '내 차의 주유 기록을 한눈에',
-                style: TextStyle(
-                  color: Color(0xFF7F8D9C),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-        IconButton(
-          tooltip: '차량 설정',
-          onPressed: () {
-            setState(() {
-              _currentMainTab = 2;
-            });
-            _tabController.animateTo(3);
-          },
-          icon: const Icon(Icons.settings_outlined, color: Color(0xFF86D9C2)),
-        ),
-      ],
     );
   }
 
@@ -1150,24 +1192,35 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF2E3D4C), Color(0xFF111C28)],
+                colors: [Color(0xFF193550), Color(0xFF0D2033)],
               ),
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Icon(
-                  Icons.directions_car_rounded,
-                  color: Colors.white.withOpacity(0.28),
-                  size: 74,
-                ),
+                if (car?.photoBytes != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      car!.photoBytes!,
+                      width: double.infinity,
+                      height: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else
+                  Icon(
+                    Icons.directions_car_rounded,
+                    color: Colors.white.withOpacity(0.28),
+                    size: 74,
+                  ),
                 if (car == null)
                   const Positioned(
                     bottom: 6,
                     child: Text(
                       '차량 설정',
                       style: TextStyle(
-                        color: Color(0xFF00D084),
+                        color: Color(0xFF00E58A),
                         fontSize: 10,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1377,7 +1430,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       margin: const EdgeInsets.only(right: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFF0E1A26),
+        color: const Color(0xFF091A2A),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -1388,7 +1441,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Color(0xFF7F8D9C),
+              color: Color(0xFF8296AA),
               fontSize: 10,
               fontWeight: FontWeight.w800,
             ),
@@ -1415,7 +1468,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0E1A26),
+        color: const Color(0xFF091A2A),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -1454,14 +1507,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: const Color(0xFF111C28),
+        color: const Color(0xFF0D2033),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF1D2B38)),
+        border: Border.all(color: const Color(0xFF1B3852)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
+            color: const Color(0xFF00101C).withOpacity(0.38),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
           ),
         ],
       ),
@@ -1485,7 +1538,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF8F7F6),
+      backgroundColor: const Color(0xFF061421),
       builder: (context) {
         return SafeArea(
           child: Padding(
@@ -1679,11 +1732,103 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   void _runCurrentCalculation() {
     if (_isAverageMode) {
       _onCalcAverage();
+      final value = _avgResult;
+      if (value != null && value > 0) {
+        _showCalculationResultPopup(
+          title: '평균 옥탄가',
+          value: value.toStringAsFixed(2),
+          message: _avgComment ?? '',
+          onSave: _saveAverageLog,
+        );
+      }
     } else if (_isMixedMode) {
       _onCalcMixed();
+      final value = _mixResult;
+      if (value != null && value > 0) {
+        _showCalculationResultPopup(
+          title: '최종 옥탄가',
+          value: value.toStringAsFixed(2),
+          message: _mixComment ?? '',
+          onSave: _saveMixedLog,
+        );
+      }
     } else {
       _onCalcTarget();
+      final requiredLiter = _targetRequiredLiter;
+      _showCalculationResultPopup(
+        title: _targetImpossible ? '목표 도달 불가' : '필요 주유량',
+        value:
+            _targetImpossible || requiredLiter == null
+                ? '--'
+                : '${requiredLiter.toStringAsFixed(1)} L',
+        message: _targetComment ?? '',
+        onSave:
+            _targetImpossible || requiredLiter == null ? null : _saveTargetLog,
+      );
     }
+  }
+
+  Future<void> _showCalculationResultPopup({
+    required String title,
+    required String value,
+    required String message,
+    VoidCallback? onSave,
+  }) async {
+    FocusScope.of(context).unfocus();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+    }
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.calculate_rounded,
+            color: Color(0xFF00E58A),
+            size: 34,
+          ),
+          title: Text(title, textAlign: TextAlign.center),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 42,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFB7C7D8), height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('닫기'),
+            ),
+            if (onSave != null)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  onSave();
+                },
+                icon: const Icon(Icons.save_rounded),
+                label: const Text('기록 저장'),
+              ),
+          ],
+        );
+      },
+    );
   }
 
   double _currentOctaneValue() {
@@ -1960,9 +2105,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
   Widget _inputInfoCard() {
     return Card(
       margin: EdgeInsets.zero,
-      elevation: 3,
-      shadowColor: Colors.black.withOpacity(0.06),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 0,
+      color: const Color(0xFF0D2033),
+      shadowColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: Color(0xFF1B3852)),
+      ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
@@ -1970,7 +2119,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           initiallyExpanded: _shouldExpandInput,
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          leading: const Icon(Icons.tune_rounded),
+          leading: const Icon(Icons.tune_rounded, color: Color(0xFF00E58A)),
           title: Row(
             children: [
               const Expanded(
@@ -1986,7 +2135,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   padding: const EdgeInsets.all(4),
                   child: Icon(
                     Icons.help_outline_rounded,
-                    color: Colors.grey.shade700,
+                    color: const Color(0xFF8296AA),
                     size: 20,
                   ),
                 ),
@@ -1996,7 +2145,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           subtitle: Text(
             _shouldExpandInput ? '계산 방식을 선택하고 값을 입력' : '값을 수정하려면 펼쳐서 다시 계산',
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: const Color(0xFF8296AA),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -2056,7 +2205,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0EEEE),
+        color: const Color(0xFF091A2A),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -2080,20 +2229,20 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       width: double.infinity,
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAF9F8),
+        color: const Color(0xFF091A2A),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE7DFDB)),
+        border: Border.all(color: const Color(0xFF1B3852)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF8B3A3A), size: 20),
+          Icon(icon, color: const Color(0xFF00E58A), size: 20),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
               _modeDescription(),
               style: TextStyle(
-                color: Colors.grey.shade700,
+                color: const Color(0xFFB7C7D8),
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 height: 1.35,
@@ -2165,14 +2314,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF8B3A3A) : Colors.transparent,
+            color: selected ? const Color(0xFF00B96F) : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
           ),
           child: Center(
             child: Text(
               text,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.black87,
+                color: selected ? Colors.white : const Color(0xFFB8C4D1),
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
               ),
@@ -2238,23 +2387,62 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFFAF9F8),
+          color: const Color(0xFF0E1A26),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE7DFDB)),
+          border: Border.all(color: const Color(0xFF1D2B38)),
         ),
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 14),
           childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          leading: const Icon(Icons.receipt_long_rounded),
+          leading: const Icon(
+            Icons.receipt_long_rounded,
+            color: Color(0xFF00D084),
+          ),
           title: const Text(
             '기록 정보',
             style: TextStyle(fontWeight: FontWeight.w900),
           ),
           subtitle: const Text('단가, 총액, 메모 선택 입력'),
           children: [
-            _numberField(priceCtrl, '리터당 단가 (원)', hint: '예: 1890'),
-            const SizedBox(height: 14),
-            _numberField(totalCostCtrl, '총 주유 금액 (원)', hint: '예: 70000'),
+            if (_isAverageMode) ...[
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '고급유 금액',
+                  style: TextStyle(
+                    color: Color(0xFF00E58A),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _numberField(highPriceCtrl, '고급유 리터당 단가 (원)', hint: '예: 1990'),
+              const SizedBox(height: 12),
+              _numberField(highTotalCostCtrl, '고급유 총액 (원)', hint: '예: 39800'),
+              const SizedBox(height: 16),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '일반유 금액',
+                  style: TextStyle(
+                    color: Color(0xFF46A3FF),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _numberField(regularPriceCtrl, '일반유 리터당 단가 (원)', hint: '예: 1690'),
+              const SizedBox(height: 12),
+              _numberField(
+                regularTotalCostCtrl,
+                '일반유 총액 (원)',
+                hint: '예: 42250',
+              ),
+            ] else ...[
+              _numberField(priceCtrl, '리터당 단가 (원)', hint: '예: 1890'),
+              const SizedBox(height: 14),
+              _numberField(totalCostCtrl, '총 주유 금액 (원)', hint: '예: 70000'),
+            ],
             const SizedBox(height: 14),
             TextField(
               controller: memoCtrl,
@@ -2430,7 +2618,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             const Text(
               '필요 주유량',
               style: TextStyle(
-                color: Color(0xFF5F504C),
+                color: Color(0xFFB8C4D1),
                 fontSize: 14,
                 fontWeight: FontWeight.w900,
               ),
@@ -2442,7 +2630,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 fontSize: 58,
                 fontWeight: FontWeight.w900,
                 letterSpacing: -0.8,
-                color: Colors.black87,
+                color: Colors.white,
               ),
             ),
             if (!_targetImpossible && _targetRequiredLiter != null) ...[
@@ -2450,7 +2638,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               _unsavedNotice(),
             ],
             const SizedBox(height: 12),
-            Divider(height: 1, color: Colors.grey.shade300),
+            const Divider(height: 1, color: Color(0xFF1D2B38)),
             const SizedBox(height: 14),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2463,7 +2651,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade700,
+                      color: const Color(0xFFB8C4D1),
                       height: 1.45,
                     ),
                   ),
@@ -2513,7 +2701,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               const Text(
                 '계산 결과',
                 style: TextStyle(
-                  color: Color(0xFF5F504C),
+                  color: Color(0xFFB8C4D1),
                   fontSize: 14,
                   fontWeight: FontWeight.w900,
                 ),
@@ -2530,7 +2718,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                       fontSize: 60,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -0.8,
-                      color: Colors.black87,
+                      color: Colors.white,
                     ),
                   );
                 },
@@ -2540,7 +2728,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 _unsavedNotice(),
               ],
               const SizedBox(height: 12),
-              Divider(height: 1, color: Colors.grey.shade300),
+              const Divider(height: 1, color: Color(0xFF1D2B38)),
               const SizedBox(height: 14),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2554,7 +2742,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade700,
+                        color: const Color(0xFFB8C4D1),
                         height: 1.45,
                       ),
                     ),
@@ -2679,12 +2867,12 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             IntrinsicHeight(
               child: Row(
                 children: [
-                  Expanded(child: _statItem('평균', avg, Colors.black87)),
-                  const VerticalDivider(color: Color(0xFFE7DFDB), width: 1),
+                  Expanded(child: _statItem('평균', avg, Colors.white)),
+                  const VerticalDivider(color: Color(0xFF1B3852), width: 1),
                   Expanded(
-                    child: _statItem('최고', max, const Color(0xFF8B2F32)),
+                    child: _statItem('최고', max, const Color(0xFF00E58A)),
                   ),
-                  const VerticalDivider(color: Color(0xFFE7DFDB), width: 1),
+                  const VerticalDivider(color: Color(0xFF1B3852), width: 1),
                   Expanded(
                     child: _statItem('최저', min, const Color(0xFF2C83C8)),
                   ),
@@ -2695,7 +2883,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             Text(
               '총 기록 ${logs.length}개',
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: const Color(0xFF8296AA),
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -2711,7 +2899,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         Text(
           title,
           style: TextStyle(
-            color: Colors.grey.shade600,
+            color: const Color(0xFF8296AA),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -2805,14 +2993,14 @@ class _OctaneHomePageState extends State<OctaneHomePage>
         child: Container(
           padding: const EdgeInsets.fromLTRB(11, 11, 8, 11),
           decoration: BoxDecoration(
-            color: const Color(0xFF0E1A26),
+            color: const Color(0xFF091A2A),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
               const Icon(
                 Icons.local_gas_station_rounded,
-                color: Color(0xFF00D084),
+                color: Color(0xFF00E58A),
                 size: 19,
               ),
               const SizedBox(width: 9),
@@ -2909,10 +3097,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: const Color(0xFF063D2E),
+            color: const Color(0xFF073F35),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, color: const Color(0xFF00D084)),
+          child: Icon(icon, color: const Color(0xFF00E58A)),
         ),
         const SizedBox(width: 11),
         Expanded(
@@ -2931,7 +3119,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               Text(
                 subtitle,
                 style: const TextStyle(
-                  color: Color(0xFF7F8D9C),
+                  color: Color(0xFF8296AA),
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -2949,7 +3137,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       icon: Icon(icon),
       label: Text(text),
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF00A866),
+        backgroundColor: const Color(0xFF00B96F),
         foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(50),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2973,7 +3161,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             horizontal: 15,
             vertical: 5,
           ),
-          leading: Icon(icon, color: const Color(0xFF00D084), size: 26),
+          leading: Icon(icon, color: const Color(0xFF00E58A), size: 26),
           title: Text(
             title,
             style: const TextStyle(
@@ -2983,7 +3171,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
           ),
           subtitle: Text(
             subtitle,
-            style: const TextStyle(color: Color(0xFF7F8D9C), fontSize: 12),
+            style: const TextStyle(color: Color(0xFF8296AA), fontSize: 12),
           ),
           trailing: const Icon(
             Icons.chevron_right_rounded,
@@ -2999,11 +3187,17 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: const Color(0xFF07111B),
-      builder:
-          (_) => SafeArea(
+      backgroundColor: const Color(0xFF061421),
+      builder: (sheetContext) {
+        final keyboardInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: keyboardInset),
+          child: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 36),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -3021,6 +3215,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               ),
             ),
           ),
+        );
+      },
     );
   }
 
@@ -3305,8 +3501,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
       curve: Curves.easeOutCubic,
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF0D2033),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF1B3852)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -3326,7 +3523,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
-                  color: Color(0xFF151823),
+                  color: Colors.white,
                 ),
               ),
               Container(
@@ -3372,7 +3569,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                         Text(
                           '최근 변화',
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: const Color(0xFF8296AA),
                             fontWeight: FontWeight.w800,
                             fontSize: 10,
                           ),
@@ -3407,7 +3604,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               style: const TextStyle(
                 fontSize: 38,
                 fontWeight: FontWeight.w900,
-                color: Color(0xFF151823),
+                color: Colors.white,
               ),
             ),
           ),
@@ -3418,7 +3615,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             _touchedValue != null ? '선택한 기록  $selectedLabel' : '현재 위치: 최신 기록',
             style: TextStyle(
               fontSize: 13,
-              color: Colors.grey.shade600,
+              color: const Color(0xFF8296AA),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -3449,7 +3646,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                         return Text(
                           value.toInt().toString(),
                           style: TextStyle(
-                            color: Colors.grey.shade700,
+                            color: const Color(0xFF8296AA),
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),
@@ -3481,7 +3678,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                           child: Text(
                             '${chartLogs[index].time.month}/${chartLogs[index].time.day}',
                             style: const TextStyle(
-                              color: Color(0xFF343A46),
+                              color: Color(0xFF8296AA),
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
                             ),
@@ -3507,7 +3704,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                     if (target != null)
                       HorizontalLine(
                         y: target,
-                        color: const Color(0xFFC83E43).withOpacity(0.42),
+                        color: const Color(0xFF00E58A).withOpacity(0.42),
                         strokeWidth: 1,
                         dashArray: [4, 3],
                         label: HorizontalLineLabel(
@@ -3516,7 +3713,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                           labelResolver:
                               (_) => '${target.toStringAsFixed(0)} (목표)',
                           style: const TextStyle(
-                            color: Color(0xFFC83E43),
+                            color: Color(0xFF00E58A),
                             fontSize: 11,
                             fontWeight: FontWeight.w900,
                           ),
@@ -3528,7 +3725,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                           ? [
                             VerticalLine(
                               x: _selectedSpotIndex!.toDouble(),
-                              color: const Color(0xFF8B3A3A).withOpacity(0.20),
+                              color: const Color(0xFF46A3FF).withOpacity(0.32),
                               strokeWidth: 1.2,
                               dashArray: [6, 4],
                             ),
@@ -3594,7 +3791,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                     isCurved: true,
                     curveSmoothness: 0.20,
                     preventCurveOverShooting: true,
-                    color: const Color(0xFFC83E43),
+                    color: const Color(0xFF46A3FF),
                     barWidth: 3,
                     isStrokeCapRound: true,
                     dotData: FlDotData(
@@ -3606,7 +3803,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                         if (isSelected) {
                           return FlDotCirclePainter(
                             radius: 7.5,
-                            color: const Color(0xFFC83E43),
+                            color: const Color(0xFF46A3FF),
                             strokeWidth: 4,
                             strokeColor: Colors.white,
                           );
@@ -3615,7 +3812,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                         if (isLatest) {
                           return FlDotCirclePainter(
                             radius: 5.5,
-                            color: const Color(0xFFC83E43),
+                            color: const Color(0xFF46A3FF),
                             strokeWidth: 2,
                             strokeColor: Colors.white,
                           );
@@ -3625,13 +3822,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                           radius: 4.5,
                           color: Colors.white,
                           strokeWidth: 2.6,
-                          strokeColor: const Color(0xFFC83E43),
+                          strokeColor: const Color(0xFF46A3FF),
                         );
                       },
                     ),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: const Color(0xFFC83E43).withOpacity(0.09),
+                      color: const Color(0xFF46A3FF).withOpacity(0.12),
                       applyCutOffY: true,
                       cutOffY: 90,
                     ),
@@ -3684,8 +3881,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                     children: [
                       Text(
                         _dateOnly(latest.time),
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
+                        style: const TextStyle(
+                          color: Color(0xFF8296AA),
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -3699,7 +3896,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF151823),
+                    color: Colors.white,
                   ),
                 ),
               ],
@@ -3763,8 +3960,8 @@ class _OctaneHomePageState extends State<OctaneHomePage>
               label: const Text('전체 기록 보기'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
-                foregroundColor: const Color(0xFF312827),
-                side: const BorderSide(color: Color(0xFFE0D8D4)),
+                foregroundColor: const Color(0xFF00E58A),
+                side: const BorderSide(color: Color(0xFF1B3852)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -3791,10 +3988,10 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: Colors.white,
+        color: const Color(0xFF091A2A),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: Color(0xFFE8E1DD)),
+          side: const BorderSide(color: Color(0xFF1B3852)),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -3817,7 +4014,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   child: Text(
                     _dateTimeShort(log.time),
                     style: const TextStyle(
-                      color: Color(0xFF343A46),
+                      color: Color(0xFFB7C7D8),
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
@@ -3828,7 +4025,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF151823),
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -4063,6 +4260,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     carRecCtrl.text = car.recommendedOctane.toString();
     carWarnCtrl.text = car.warningOctane.toString();
     carTankCtrl.text = car.tankCapacity?.toString() ?? '';
+    _selectedCarPhoto ??= car.photoBytes;
   }
 
   Widget _buildVehicleDashboardTab() {
@@ -4134,11 +4332,20 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                       color: const Color(0xFF1C2A38),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      Icons.directions_car_rounded,
-                      color: Colors.white.withOpacity(0.38),
-                      size: 78,
-                    ),
+                    child:
+                        car?.photoBytes != null
+                            ? ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.memory(
+                                car!.photoBytes!,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                            : Icon(
+                              Icons.directions_car_rounded,
+                              color: Colors.white.withOpacity(0.38),
+                              size: 78,
+                            ),
                   ),
                 ],
               ),
@@ -4211,8 +4418,17 @@ class _OctaneHomePageState extends State<OctaneHomePage>
             _darkActionButton(
               car == null ? '차량 등록하기' : '차량 정보 편집',
               Icons.edit_rounded,
-              () =>
-                  _showFeatureSheet('차량 정보 편집', _vehicleSettingsCard(box, car)),
+              () {
+                if (car != null) {
+                  _fillCarForm(car);
+                } else {
+                  _selectedCarPhoto = null;
+                }
+                _showFeatureSheet(
+                  car == null ? '차량 등록' : '차량 정보 편집',
+                  _vehicleSettingsCard(box, car, closeOnSave: true),
+                );
+              },
             ),
           ],
         );
@@ -4343,19 +4559,30 @@ class _OctaneHomePageState extends State<OctaneHomePage>
     );
   }
 
-  Widget _vehicleSettingsCard(Box<CarProfile> box, CarProfile? car) {
+  Widget _vehicleSettingsCard(
+    Box<CarProfile> box,
+    CarProfile? car, {
+    bool closeOnSave = false,
+  }) {
     return Card(
       margin: EdgeInsets.zero,
-      elevation: 3,
-      shadowColor: Colors.black.withOpacity(0.06),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 0,
+      color: const Color(0xFF0D2033),
+      shadowColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: Color(0xFF1B3852)),
+      ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: car == null,
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          leading: const Icon(Icons.directions_car_outlined),
+          leading: const Icon(
+            Icons.directions_car_outlined,
+            color: Color(0xFF00E58A),
+          ),
           title: const Text(
             '차량 설정',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
@@ -4365,7 +4592,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 ? '권장 옥탄가와 경고 기준을 저장해 주세요'
                 : '${car.name} (${car.year})  권장 ${car.recommendedOctane} / 경고 ${car.warningOctane}',
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: const Color(0xFF8296AA),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -4376,7 +4603,7 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 child: Text(
                   '아직 저장된 차량 정보가 없습니다.',
                   style: TextStyle(
-                    color: Colors.grey.shade700,
+                    color: const Color(0xFFB8C4D1),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -4386,9 +4613,9 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFAF9F8),
+                  color: const Color(0xFF091A2A),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE7DFDB)),
+                  border: Border.all(color: const Color(0xFF1B3852)),
                 ),
                 child: Text(
                   '${car.name} (${car.year})  권장 ${car.recommendedOctane} / 경고 ${car.warningOctane}'
@@ -4400,12 +4627,74 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                 ),
               ),
             const SizedBox(height: 12),
+            StatefulBuilder(
+              builder:
+                  (context, setPhotoState) => InkWell(
+                    onTap: () async {
+                      final photo = await _pickCarPhoto();
+                      if (photo != null) setPhotoState(() {});
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      width: double.infinity,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF091A2A),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF1B3852)),
+                      ),
+                      child:
+                          _selectedCarPhoto != null
+                              ? Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(9),
+                                    child: Image.memory(
+                                      _selectedCarPhoto!,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  const Align(
+                                    alignment: Alignment.bottomRight,
+                                    child: Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: CircleAvatar(
+                                        backgroundColor: Color(0xCC061421),
+                                        foregroundColor: Color(0xFF00E58A),
+                                        child: Icon(Icons.edit_rounded),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                              : const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate_outlined,
+                                    color: Color(0xFF00E58A),
+                                    size: 36,
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    '차량 사진 등록',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                    ),
+                  ),
+            ),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFFAF9F8),
+                color: const Color(0xFF091A2A),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE7DFDB)),
+                border: Border.all(color: const Color(0xFF1B3852)),
               ),
               child: Column(
                 children: [
@@ -4467,9 +4756,13 @@ class _OctaneHomePageState extends State<OctaneHomePage>
                   recommend: recommend!,
                   warning: warning!,
                   tank: tank,
+                  photoBytes: _selectedCarPhoto,
                 );
 
                 FocusScope.of(context).unfocus();
+                if (closeOnSave && Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
                 ScaffoldMessenger.of(
                   context,
                 ).showSnackBar(const SnackBar(content: Text('차량 정보를 저장했습니다.')));

@@ -22,14 +22,15 @@ class CarProfileAdapter extends TypeAdapter<CarProfile> {
       year: fields[1] as int,
       recommendedOctane: fields[2] as double,
       warningOctane: fields[3] as double,
-      tankCapacity: fields[4] as double?, // 🔥 추가
+      tankCapacity: fields[4] as double?,
+      photoBytes: fields[5] as Uint8List?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CarProfile obj) {
     writer
-      ..writeByte(5) // 🔥 기존 4 → 5로 변경
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -39,7 +40,9 @@ class CarProfileAdapter extends TypeAdapter<CarProfile> {
       ..writeByte(3)
       ..write(obj.warningOctane)
       ..writeByte(4)
-      ..write(obj.tankCapacity); // 🔥 추가
+      ..write(obj.tankCapacity)
+      ..writeByte(5)
+      ..write(obj.photoBytes);
   }
 
   @override
